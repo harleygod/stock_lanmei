@@ -18,8 +18,6 @@ import {
 } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor } from '../utils/format';
 import { boardLabel, isShanghai } from '../utils/stockCode';
-import type { Board } from '../types';
-
 import OpportunityCostTab from '../components/calc/OpportunityCostTab';
 import MarginOfSafetyTab from '../components/calc/MarginOfSafetyTab';
 import FeeDragTab from '../components/calc/FeeDragTab';

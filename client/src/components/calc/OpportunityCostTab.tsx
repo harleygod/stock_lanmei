@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { usePortfolio } from '../../hooks/usePortfolio';
 import { opportunityCostCompare, swapCost } from '../../utils/calculations';
 import { formatMoney, formatPct } from '../../utils/format';

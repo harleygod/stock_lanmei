@@ -2,7 +2,6 @@ import { Link, NavLink, Outlet, Route, Routes } from 'react-router-dom';
 import { useEffect, useMemo } from 'react';
 import { useAppData } from './hooks/useAppData';
 import DisclaimerFooter from './components/DisclaimerFooter';
-import PortfolioSelector from './components/PortfolioSelector';
 import { isPendingReady } from './utils/migrate';
 import HomePage from './pages/HomePage';
 import CalculatorPage from './pages/CalculatorPage';
@@ -64,7 +63,23 @@ function Layout() {
               </NavLink>
             ))}
           </nav>
-          <PortfolioSelector />
+          {data.portfolios.length <= 1 ? (
+            <span className="hidden text-xs text-muted md:inline">
+              {data.portfolios[0]?.name ?? '默认组合'}
+            </span>
+          ) : (
+            <select
+              className="hidden max-w-[120px] rounded border border-border bg-surface px-2 py-1 text-xs md:inline"
+              value={data.activePortfolioId}
+              onChange={(e) => update((d) => ({ ...d, activePortfolioId: e.target.value }))}
+            >
+              {data.portfolios.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="button" onClick={toggleTheme} className="btn-ghost text-xs">
             {data.settings.theme === 'dark' ? '浅色' : '深色'}
           </button>

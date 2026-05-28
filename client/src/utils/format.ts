@@ -24,7 +24,13 @@ export function pnlColor(n: number): string {
 }
 
 export function uid(): string {
-  return crypto.randomUUID();
+  // crypto.randomUUID() requires secure context (HTTPS/localhost)
+  // Use manual UUID v4 for HTTP compatibility
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export function todayISO(): string {
