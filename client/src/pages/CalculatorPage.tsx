@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAppContext } from '../hooks/useAppContext';
+import { usePortfolio } from '../hooks/usePortfolio';
+import PositionImportBar from '../components/PositionImportBar';
+import type { Board, PositionImportPayload } from '../types';
 import {
   batchSellPlan,
   evAdvice,
@@ -39,11 +42,29 @@ const TABS: { id: Tab; label: string }[] = [
 export default function CalculatorPage() {
   const [tab, setTab] = useState<Tab>('ev');
   const { data } = useAppContext();
+  const { positions } = usePortfolio();
   const settings = data.settings;
+  const [importPayload, setImportPayload] = useState<PositionImportPayload | null>(null);
+  const [importTick, setImportTick] = useState(0);
+
+  const handleImport = (p: { id: string; name: string; code: string; costPrice: number; shares: number; board: Board }) => {
+    setImportPayload({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      price: p.costPrice,
+      shares: p.shares,
+      board: p.board,
+    });
+    setImportTick((t) => t + 1);
+  };
+
+  const importProps = { importPayload, importTick };
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">计算器中心</h1>
+      <PositionImportBar positions={positions} onImport={handleImport} />
       <div className="flex gap-2 overflow-x-auto border-b border-border pb-1">
         {TABS.map((t) => (
           <button
@@ -57,14 +78,14 @@ export default function CalculatorPage() {
         ))}
       </div>
       {tab === 'ev' && <EVCalculator />}
-      {tab === 'profit' && <ProfitCalculator settings={settings} />}
-      {tab === 'stop' && <StopCalculator settings={settings} />}
-      {tab === 'batch' && <BatchCalculator settings={settings} />}
-      {tab === 'cost' && <CostCalculator settings={settings} />}
-      {tab === 'matrix' && <MatrixCalculator />}
+      {tab === 'profit' && <ProfitCalculator settings={settings} {...importProps} />}
+      {tab === 'stop' && <StopCalculator settings={settings} {...importProps} />}
+      {tab === 'batch' && <BatchCalculator settings={settings} {...importProps} />}
+      {tab === 'cost' && <CostCalculator settings={settings} {...importProps} />}
+      {tab === 'matrix' && <MatrixCalculator {...importProps} />}
       {tab === 'opp' && <OpportunityCostTab settings={settings} />}
-      {tab === 'mos' && <MarginOfSafetyTab settings={settings} />}
-      {tab === 'fee' && <FeeDragTab settings={settings} />}
+      {tab === 'mos' && <MarginOfSafetyTab settings={settings} {...importProps} />}
+      {tab === 'fee' && <FeeDragTab settings={settings} {...importProps} />}
 
       <MungerQuote />
     </div>
@@ -104,11 +125,29 @@ function EVCalculator() {
   );
 }
 
-function ProfitCalculator({ settings }: { settings: typeof import('../types').DEFAULT_SETTINGS }) {
+function ProfitCalculator({
+  settings,
+  importPayload,
+  importTick,
+}: {
+  settings: typeof import('../types').DEFAULT_SETTINGS;
+  importPayload: PositionImportPayload | null;
+  importTick: number;
+}) {
   const [price, setPrice] = useState(10);
   const [shares, setShares] = useState(1000);
   const [board, setBoard] = useState<Board>('sz_main');
   const [targetProfit, setTargetProfit] = useState(500);
+
+  const applyImport = useCallback((p: PositionImportPayload) => {
+    setPrice(p.price);
+    setShares(p.shares);
+    setBoard(p.board);
+  }, []);
+
+  useEffect(() => {
+    if (importPayload && importTick > 0) applyImport(importPayload);
+  }, [importTick, importPayload, applyImport]);
 
   const buy = totalBuyCost(price, shares, board, settings);
   const sellP = targetSellPrice(price, shares, board, settings, targetProfit);
@@ -149,12 +188,28 @@ function ProfitCalculator({ settings }: { settings: typeof import('../types').DE
   );
 }
 
-function StopCalculator({ settings }: { settings: typeof import('../types').DEFAULT_SETTINGS }) {
+function StopCalculator({
+  settings,
+  importPayload,
+  importTick,
+}: {
+  settings: typeof import('../types').DEFAULT_SETTINGS;
+  importPayload: PositionImportPayload | null;
+  importTick: number;
+}) {
   const [price, setPrice] = useState(10);
   const [shares, setShares] = useState(1000);
   const [board, setBoard] = useState<Board>('sz_main');
   const [totalAssets, setTotalAssets] = useState(100000);
   const [maxLoss, setMaxLoss] = useState(2000);
+
+  useEffect(() => {
+    if (importPayload && importTick > 0) {
+      setPrice(importPayload.price);
+      setShares(importPayload.shares);
+      setBoard(importPayload.board);
+    }
+  }, [importTick, importPayload]);
 
   const stopP = stopLossPrice(price, shares, board, settings, maxLoss);
   const buy = totalBuyCost(price, shares, board, settings);
@@ -186,12 +241,29 @@ function StopCalculator({ settings }: { settings: typeof import('../types').DEFA
   );
 }
 
-function BatchCalculator({ settings }: { settings: typeof import('../types').DEFAULT_SETTINGS }) {
+function BatchCalculator({
+  settings,
+  importPayload,
+  importTick,
+}: {
+  settings: typeof import('../types').DEFAULT_SETTINGS;
+  importPayload: PositionImportPayload | null;
+  importTick: number;
+}) {
   const [avgCost, setAvgCost] = useState(10);
   const [shares, setShares] = useState(1000);
   const [current, setCurrent] = useState(12);
   const [board, setBoard] = useState<Board>('sz_main');
   const [batches, setBatches] = useState(3);
+
+  useEffect(() => {
+    if (importPayload && importTick > 0) {
+      setAvgCost(importPayload.price);
+      setShares(importPayload.shares);
+      setBoard(importPayload.board);
+      setCurrent(importPayload.price);
+    }
+  }, [importTick, importPayload]);
 
   const plan = batchSellPlan(avgCost, shares, current, board, settings, batches);
 
@@ -246,10 +318,26 @@ function BatchCalculator({ settings }: { settings: typeof import('../types').DEF
   );
 }
 
-function CostCalculator({ settings }: { settings: typeof import('../types').DEFAULT_SETTINGS }) {
+function CostCalculator({
+  settings,
+  importPayload,
+  importTick,
+}: {
+  settings: typeof import('../types').DEFAULT_SETTINGS;
+  importPayload: PositionImportPayload | null;
+  importTick: number;
+}) {
   const [lots, setLots] = useState([{ price: 10, shares: 500 }, { price: 9.5, shares: 500 }]);
   const [board, setBoard] = useState<Board>('sz_main');
   const [current, setCurrent] = useState(10.5);
+
+  useEffect(() => {
+    if (importPayload && importTick > 0) {
+      setLots([{ price: importPayload.price, shares: importPayload.shares }]);
+      setBoard(importPayload.board);
+      setCurrent(importPayload.price);
+    }
+  }, [importTick, importPayload]);
 
   const avg = weightedAverageCost(lots, board, settings);
   const sell = netSellProceeds(current, avg.totalShares, board, settings);
@@ -288,11 +376,21 @@ function CostCalculator({ settings }: { settings: typeof import('../types').DEFA
   );
 }
 
-function MatrixCalculator() {
+function MatrixCalculator({
+  importPayload,
+  importTick,
+}: {
+  importPayload: PositionImportPayload | null;
+  importTick: number;
+}) {
   const [base, setBase] = useState(10);
   const [bullPct, setBullPct] = useState(20);
   const [bearPct, setBearPct] = useState(15);
   const [probBull, setProbBull] = useState(40);
+
+  useEffect(() => {
+    if (importPayload && importTick > 0) setBase(importPayload.price);
+  }, [importTick, importPayload]);
 
   const m = scenarioMatrix(base, bullPct, bearPct, probBull);
 

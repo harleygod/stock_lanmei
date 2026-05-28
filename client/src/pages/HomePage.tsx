@@ -10,7 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { useAppContext } from '../hooks/useAppContext';
+import { usePortfolio } from '../hooks/usePortfolio';
 import { getEffectivePrice, useStockQuotes } from '../hooks/useStockQuotes';
 import { herfindahlIndex, positionMetrics } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor, uid } from '../utils/format';
@@ -27,8 +27,8 @@ function weightColor(w: number) {
 }
 
 export default function HomePage() {
-  const { data, update } = useAppContext();
-  const codes = data.positions.map((p) => p.code);
+  const { data, positions, portfolio, updatePortfolio } = usePortfolio();
+  const codes = positions.map((p) => p.code);
   const { quotes, loading, error, manualMode, refresh } = useStockQuotes(
     codes,
     data.settings.refreshIntervalSec,
@@ -45,7 +45,7 @@ export default function HomePage() {
   });
 
   const enriched = useMemo(() => {
-    const items = data.positions.map((p) => {
+    const items = positions.map((p) => {
       const { price, isClosed, source } = getEffectivePrice(p.code, quotes, p.manualPrice);
       return { position: p, price, isClosed, source };
     });
@@ -61,7 +61,7 @@ export default function HomePage() {
         totalValue,
       ),
     }));
-  }, [data.positions, data.settings, quotes]);
+  }, [positions, data.settings, quotes]);
 
   const totalInvest = enriched.reduce((s, e) => s + e.metrics.buyCost, 0);
   const totalValue = enriched.reduce((s, e) => s + e.metrics.marketValue, 0);
@@ -109,20 +109,20 @@ export default function HomePage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    update((d) => ({ ...d, positions: [...d.positions, pos] }));
+    updatePortfolio((p) => ({ ...p, positions: [...p.positions, pos] }));
     setForm({ name: '', code: '', costPrice: '', shares: '', board: 'sz_main', note: '' });
     setShowForm(false);
   };
 
   const removePosition = (id: string) => {
     if (!confirm('删除该持仓？')) return;
-    update((d) => ({ ...d, positions: d.positions.filter((p) => p.id !== id) }));
+    updatePortfolio((p) => ({ ...p, positions: p.positions.filter((x) => x.id !== id) }));
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">持仓总览</h1>
+        <h1 className="text-xl font-bold">持仓总览 · {portfolio.name}</h1>
         <div className="flex gap-2">
           <button type="button" onClick={refresh} className="btn-ghost text-xs" disabled={loading}>
             {loading ? '刷新中…' : '刷新行情'}
@@ -188,10 +188,10 @@ export default function HomePage() {
           sub={formatPct(totalPnlPct)}
           subClass={pnlColor(totalPnl)}
         />
-        <StatCard title="持股 / 集中度" value={`${data.positions.length} 只`} sub={`HHI ${(hhi * 100).toFixed(1)}%`} />
+        <StatCard title="持股 / 集中度" value={`${positions.length} 只`} sub={`HHI ${(hhi * 100).toFixed(1)}%`} />
       </div>
 
-      {data.positions.length === 0 ? (
+      {positions.length === 0 ? (
         <div className="card text-center text-muted py-12">暂无持仓，点击「添加持仓」开始</div>
       ) : (
         <div className="card overflow-x-auto">

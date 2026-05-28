@@ -1,12 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { marginOfSafety } from '../../utils/calculations';
 import { formatMoney, formatPct } from '../../utils/format';
-import { BoardSelect, Field, ResultBox, type CalcSettings } from './Shared';
+import { Field, ResultBox, type CalcSettings } from './Shared';
+import type { PositionImportPayload } from '../../types';
 
-export default function MarginOfSafetyTab(_props: { settings: CalcSettings }) {
+export default function MarginOfSafetyTab({
+  importPayload,
+  importTick,
+}: {
+  settings: CalcSettings;
+  importPayload?: PositionImportPayload | null;
+  importTick?: number;
+}) {
   const [fairValue, setFairValue] = useState(20);
   const [marginPct, setMarginPct] = useState(30);
   const [buyPrice, setBuyPrice] = useState(14);
+
+  useEffect(() => {
+    if (importPayload && importTick && importTick > 0) {
+      setBuyPrice(importPayload.price);
+      setFairValue(importPayload.price * 1.3);
+    }
+  }, [importTick, importPayload]);
 
   const m = marginOfSafety(fairValue, marginPct, buyPrice);
 

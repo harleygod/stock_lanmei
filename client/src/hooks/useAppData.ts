@@ -1,32 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AppData } from '../types';
+import type { AppDataV2 } from '../types';
 import { DEFAULT_DATA } from '../types';
-
-const STORAGE_KEY = 'stock-decision-assistant-v1';
-
-function load(): AppData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(DEFAULT_DATA);
-    const parsed = JSON.parse(raw) as AppData;
-    return { ...DEFAULT_DATA, ...parsed, settings: { ...DEFAULT_DATA.settings, ...parsed.settings } };
-  } catch {
-    return structuredClone(DEFAULT_DATA);
-  }
-}
-
-function save(data: AppData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+import { loadData, migrateData, saveData } from '../utils/migrate';
 
 export function useAppData() {
-  const [data, setData] = useState<AppData>(load);
+  const [data, setData] = useState<AppDataV2>(loadData);
 
   useEffect(() => {
-    save(data);
+    saveData(data);
   }, [data]);
 
-  const update = useCallback((fn: (prev: AppData) => AppData) => {
+  const update = useCallback((fn: (prev: AppDataV2) => AppDataV2) => {
     setData((prev) => fn(prev));
   }, []);
 
@@ -44,8 +28,8 @@ export function useAppData() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(reader.result as string) as AppData;
-        setData({ ...DEFAULT_DATA, ...parsed });
+        const parsed = JSON.parse(reader.result as string);
+        setData(migrateData(parsed));
       } catch {
         alert('导入失败：文件格式不正确');
       }

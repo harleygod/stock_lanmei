@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -11,12 +11,28 @@ import {
 import { feeDragCurve } from '../../utils/calculations';
 import { formatMoney } from '../../utils/format';
 import { BoardSelect, Field, ResultBox, type CalcSettings } from './Shared';
-import type { Board } from '../../types';
+import type { Board, PositionImportPayload } from '../../types';
 
-export default function FeeDragTab({ settings }: { settings: CalcSettings }) {
+export default function FeeDragTab({
+  settings,
+  importPayload,
+  importTick,
+}: {
+  settings: CalcSettings;
+  importPayload?: PositionImportPayload | null;
+  importTick?: number;
+}) {
   const [price, setPrice] = useState(10);
   const [shares, setShares] = useState(1000);
   const [board, setBoard] = useState<Board>('sz_main');
+
+  useEffect(() => {
+    if (importPayload && importTick && importTick > 0) {
+      setPrice(importPayload.price);
+      setShares(importPayload.shares);
+      setBoard(importPayload.board);
+    }
+  }, [importTick, importPayload]);
 
   const curve = useMemo(
     () => feeDragCurve(price, shares, board, settings),

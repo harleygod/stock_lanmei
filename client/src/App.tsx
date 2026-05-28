@@ -1,7 +1,9 @@
 import { Link, NavLink, Outlet, Route, Routes } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useAppData } from './hooks/useAppData';
 import DisclaimerFooter from './components/DisclaimerFooter';
+import PortfolioSelector from './components/PortfolioSelector';
+import { isPendingReady } from './utils/migrate';
 import HomePage from './pages/HomePage';
 import CalculatorPage from './pages/CalculatorPage';
 import PositionPage from './pages/PositionPage';
@@ -22,10 +24,18 @@ function Layout() {
     }));
   };
 
+  const pendingReady = useMemo(
+    () =>
+      data.pendingOps.filter(
+        (op) => op.portfolioId === data.activePortfolioId && isPendingReady(op),
+      ).length,
+    [data.pendingOps, data.activePortfolioId],
+  );
+
   const nav = [
     { to: '/', label: '持仓' },
     { to: '/calculator', label: '计算器' },
-    { to: '/logs', label: '日志' },
+    { to: '/logs', label: '日志', badge: pendingReady },
     { to: '/settings', label: '设置' },
   ];
 
@@ -46,9 +56,13 @@ function Layout() {
                 }
               >
                 {n.label}
+                {'badge' in n && n.badge ? (
+                  <span className="ml-1 rounded-full bg-warn px-1.5 text-xs text-white">{n.badge}</span>
+                ) : null}
               </NavLink>
             ))}
           </nav>
+          <PortfolioSelector />
           <button type="button" onClick={toggleTheme} className="btn-ghost text-xs">
             {data.settings.theme === 'dark' ? '浅色' : '深色'}
           </button>
@@ -71,7 +85,12 @@ function Layout() {
               `flex-1 py-3 text-center text-xs ${isActive ? 'text-blue-600 font-medium' : 'text-muted'}`
             }
           >
-            {n.label}
+            <span className="relative inline-block">
+              {n.label}
+              {'badge' in n && n.badge ? (
+                <span className="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-warn" />
+              ) : null}
+            </span>
           </NavLink>
         ))}
       </nav>

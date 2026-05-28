@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useAppContext } from '../hooks/useAppContext';
+import { usePortfolio } from '../hooks/usePortfolio';
 import { getEffectivePrice, useStockQuotes } from '../hooks/useStockQuotes';
 import { buyFee, positionMetrics, scenarioPnl, sellFee } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor } from '../utils/format';
@@ -15,8 +15,8 @@ const CHECKLIST = [
 
 export default function PositionPage() {
   const { id } = useParams();
-  const { data, update } = useAppContext();
-  const position = data.positions.find((p) => p.id === id);
+  const { data, positions, updatePortfolio } = usePortfolio();
+  const position = positions.find((p) => p.id === id);
   const { quotes } = useStockQuotes(position ? [position.code] : [], data.settings.refreshIntervalSec);
 
   const [scenarioPct, setScenarioPct] = useState(0);
@@ -26,7 +26,7 @@ export default function PositionPage() {
   const enriched = useMemo(() => {
     if (!position) return null;
     const { price, isClosed } = getEffectivePrice(position.code, quotes, position.manualPrice);
-    const allValues = data.positions.map((p) => {
+    const allValues = positions.map((p) => {
       const px = getEffectivePrice(p.code, quotes, p.manualPrice).price;
       return px * p.shares;
     });
@@ -54,7 +54,7 @@ export default function PositionPage() {
       totalAssets,
     );
     return { price, isClosed, metrics, changePct, buyF, sellF, scenario, scenarioPrice };
-  }, [position, quotes, data, scenarioPct, totalAssets]);
+  }, [position, quotes, data, scenarioPct, totalAssets, positions]);
 
   if (!position || !enriched) {
     return (
@@ -78,9 +78,9 @@ export default function PositionPage() {
 
   const setManualPrice = (v: string) => {
     const n = parseFloat(v);
-    update((d) => ({
-      ...d,
-      positions: d.positions.map((p) =>
+    updatePortfolio((pf) => ({
+      ...pf,
+      positions: pf.positions.map((p) =>
         p.id === position.id
           ? { ...p, manualPrice: n > 0 ? n : undefined, updatedAt: new Date().toISOString() }
           : p,

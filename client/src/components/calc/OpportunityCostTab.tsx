@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
-import { useAppContext } from '../../hooks/useAppContext';
+import { useEffect, useMemo, useState } from 'react';
+import { usePortfolio } from '../../hooks/usePortfolio';
 import { opportunityCostCompare, swapCost } from '../../utils/calculations';
 import { formatMoney, formatPct } from '../../utils/format';
 import { BoardSelect, Field, ResultBox, type CalcSettings } from './Shared';
 import type { Board } from '../../types';
 
 export default function OpportunityCostTab({ settings }: { settings: CalcSettings }) {
-  const { data } = useAppContext();
+  const { positions } = usePortfolio();
   const [posId, setPosId] = useState('');
 
   const [aWin, setAWin] = useState(50);
@@ -23,11 +23,11 @@ export default function OpportunityCostTab({ settings }: { settings: CalcSetting
   const [bShares, setBShares] = useState(800);
   const [bBoard, setBBoard] = useState<Board>('sz_main');
 
-  const selected = data.positions.find((p) => p.id === posId);
+  const selected = positions.find((p) => p.id === posId);
 
   const loadFromPosition = (id: string) => {
     setPosId(id);
-    const p = data.positions.find((x) => x.id === id);
+    const p = positions.find((x) => x.id === id);
     if (!p) return;
     setAPrice(p.costPrice);
     setAShares(p.shares);
@@ -54,12 +54,12 @@ export default function OpportunityCostTab({ settings }: { settings: CalcSetting
         持有的代价 = 放弃的最佳 alternative。比较持有 A 与换仓 B，哪个期望值更高。
       </p>
 
-      {data.positions.length > 0 && (
+      {positions.length > 0 && (
         <div>
           <label className="label">从持仓快速带入 A</label>
           <select className="input max-w-md" value={posId} onChange={(e) => loadFromPosition(e.target.value)}>
             <option value="">手动输入</option>
-            {data.positions.map((p) => (
+            {positions.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.code})
               </option>
