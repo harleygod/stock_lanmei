@@ -8,10 +8,10 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { feeDragCurve } from '../../utils/calculations';
+import { feeDragCurve, computeFeeDragAtTarget } from '../../utils/calculations';
 import { formatMoney } from '../../utils/format';
 import { BoardSelect, Field, ResultBox, type CalcSettings } from './Shared';
-import type { Board, PositionImportPayload } from '../../types';
+import type { Board, StockImportPayload } from '../../types';
 
 export default function FeeDragTab({
   settings,
@@ -19,7 +19,7 @@ export default function FeeDragTab({
   importTick,
 }: {
   settings: CalcSettings;
-  importPayload?: PositionImportPayload | null;
+  importPayload?: StockImportPayload | null;
   importTick?: number;
 }) {
   const [price, setPrice] = useState(10);
@@ -39,6 +39,11 @@ export default function FeeDragTab({
     [price, shares, board, settings],
   );
 
+  const example500 = useMemo(
+    () => computeFeeDragAtTarget(price, shares, board, settings, 500),
+    [price, shares, board, settings],
+  );
+
   const chartData = curve.points.map((p) => ({
     profit: Math.round(p.targetProfit),
     feeRatio: Math.round(p.feeRatio * 10) / 10,
@@ -47,7 +52,7 @@ export default function FeeDragTab({
   return (
     <div className="card space-y-4">
       <p className="text-sm text-muted">
-        小目标盈利时，手续费侵蚀严重。观察目标盈利与手续费占比的关系。
+        小目标盈利时，手续费侵蚀严重。曲线展示：<strong className="text-text">往返手续费 ÷ 毛利润</strong>（毛利润 = 价差收益，未扣费前）。
       </p>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -82,25 +87,31 @@ export default function FeeDragTab({
         </ResponsiveContainer>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
         <ResultBox
           title="50% 临界点"
           value={curve.breakeven50 != null ? `¥${formatMoney(curve.breakeven50)}` : '—'}
-          sub="手续费 = 毛利润的一半"
+          sub="毛利润中手续费 ≤50%"
         />
         <ResultBox
           title="建议最小目标盈利"
           value={curve.minProfitUnder20Pct != null ? `¥${formatMoney(curve.minProfitUnder20Pct)}` : '—'}
-          sub="手续费占比 < 20%"
+          sub="毛利润中手续费 <20%"
         />
         <ResultBox title="买入总成本" value={`¥${formatMoney(curve.buyTotalCost)}`} />
+        <ResultBox
+          title="往返手续费(估)"
+          value={`¥${formatMoney(curve.roundTripFeeAtCost)}`}
+          sub="按成本价买卖各一次"
+        />
       </div>
 
       <div className="rounded-lg bg-surface-2 p-3 text-sm text-muted">
         {curve.minProfitUnder20Pct != null ? (
           <p>
-            建议单次交易目标盈利 &gt; ¥{formatMoney(curve.minProfitUnder20Pct)}，手续费占比才低于 20%。
-            过小盈利目标会被手续费严重侵蚀。
+            建议单次目标盈利 &gt; ¥{formatMoney(curve.minProfitUnder20Pct)}（手续费占毛利润 &lt;20%）。
+            往返手续费约 ¥{formatMoney(curve.roundTripFeeAtCost)}；若目标赚 ¥500，占比约{' '}
+            {example500.feeRatio.toFixed(1)}%，远不需等到本金涨 50%。
           </p>
         ) : (
           <p>在当前参数下，即使较大目标盈利，手续费占比较高 — 可考虑增大单笔规模或减少交易频率。</p>

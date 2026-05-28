@@ -56,7 +56,35 @@ export interface Portfolio {
   logs: TradeLog[];
   /** 账户可用现金余额（元），参与仓位占比与总资产计算 */
   cashBalance: number;
+  /** 观察池：待买入标的，含触发价与期望值参数 */
+  watchPool: WatchItem[];
   createdAt: string;
+}
+
+/** 观察池条目 */
+export interface WatchItem {
+  id: string;
+  name: string;
+  code: string;
+  board: Board;
+  /** 选入理由 */
+  reason: string;
+  /** 买入触发价：跌到此价以下考虑买入 */
+  triggerPrice: number;
+  /** 区间低点（评估高位/低位，默认可由触发价推算） */
+  refLow?: number;
+  /** 区间高点 */
+  refHigh?: number;
+  /** 期望值参数：上涨概率 % */
+  winProb: number;
+  /** 预期涨幅 % */
+  gainPct: number;
+  /** 预期跌幅 % */
+  lossPct: number;
+  /** 计划最大买入金额（元） */
+  maxBuyAmount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AppSettings extends FeeSettings {
@@ -98,14 +126,25 @@ export interface StockQuote {
   updatedAt: string;
 }
 
-export interface PositionImportPayload {
+export interface StockImportPayload {
+  source: 'position' | 'watch';
   id: string;
   name: string;
   code: string;
   price: number;
   shares: number;
   board: Board;
+  /** 观察池：买入触发价 */
+  triggerPrice?: number;
+  winProb?: number;
+  gainPct?: number;
+  lossPct?: number;
+  maxBuyAmount?: number;
+  reason?: string;
 }
+
+/** 兼容旧名 */
+export type PositionImportPayload = StockImportPayload;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   commissionRate: 0.0001154,
@@ -130,6 +169,7 @@ export function createDefaultPortfolio(name = '默认组合'): Portfolio {
     positions: [],
     logs: [],
     cashBalance: 0,
+    watchPool: [],
     createdAt: now,
   };
 }

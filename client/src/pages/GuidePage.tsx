@@ -49,15 +49,53 @@ export default function GuidePage() {
         </ul>
       </Section>
 
+      <Section title="数据如何打通">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong className="text-text">单一数据源</strong>：总资产、余额、持仓市值在各页统一自动同步（与主页一致），通过下拉选择指标，无需重复手填。
+          </li>
+          <li>
+            <strong className="text-text">一键带入</strong>：计算器顶部可从「持仓 + 观察池」同时选入；观察池会额外带入 EV 参数与触发价。
+          </li>
+          <li>
+            <strong className="text-text">持仓 ↔ 观察池</strong>：持仓列表/详情可加入观察池；观察池页也可从持仓快速添加。
+          </li>
+          <li>
+            <strong className="text-text">机会成本</strong>：A 可选闲置现金或持仓，B 可选观察池；顶部带入会自动填 A 或 B，底部有全池排名。
+          </li>
+          <li>
+            <strong className="text-text">资金基准</strong>：止损、情景模拟等处可选：总资产 / 余额 / 持仓市值 / 单股市值 / 自定义。
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="观察池（打破决策瘫痪）">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>最多 5 只标的：写下<strong className="text-text">选入理由</strong>和<strong className="text-text">买入触发价</strong>，不到价不动手。</li>
+          <li>
+            <strong className="text-text">位置评估</strong>：相对区间低点/高点，判断处于低位、中位还是高位（区间不填则按触发价自动推算）。
+          </li>
+          <li>
+            <strong className="text-text">期望值 EV</strong>：结合上涨概率、预期涨跌幅，与触发价一起算「入场评分」。
+          </li>
+          <li>到价 + EV≥0 + 非高位 → 显示「可买入」；并给出计划金额内建议股数。</li>
+          <li>
+            <strong className="text-text">机会成本</strong>：计算器「机会成本」Tab 可直接从观察池选 B，或用「闲置现金」对比不动 vs 买哪只；底部有观察池 EV 排名。
+          </li>
+          <li>建议：这周必须买一只，单只仓位不超过 ¥3000，买了就别天天看。</li>
+        </ul>
+      </Section>
+
       <Section title="计算器各 Tab 何时用">
         <ul className="list-disc space-y-2 pl-5">
+          <li><strong className="text-text">买卖盈亏</strong>：输入买入价和卖出价，立刻看扣费后赚多少或亏多少。</li>
           <li><strong className="text-text">期望值</strong>：评估上涨概率 × 涨幅 vs 下跌概率 × 跌幅，看 EV 和 Kelly 仓位。</li>
           <li><strong className="text-text">盈利目标</strong>：想赚 X 元，反推需要卖到多少价（含全部费用）。</li>
-          <li><strong className="text-text">止损</strong>：最多亏多少，反推止损价；注意「亏 20% 需涨 25% 才回本」。</li>
+          <li><strong className="text-text">止损</strong>：最多亏多少反推止损价；总资金自动读主页；减仓后显示剩余持仓占比；填现价看回本/盈利需涨到的价格和幅度。</li>
           <li><strong className="text-text">分批卖出</strong>：规划分几批卖、每批到手多少。</li>
           <li><strong className="text-text">综合成本</strong>：多次加仓后的加权平均成本。</li>
           <li><strong className="text-text">情景矩阵</strong>：牛/熊两种情景 + 概率，算期望结果。</li>
-          <li><strong className="text-text">机会成本</strong>：持有 A vs 换仓 B，哪个期望值更高。</li>
+          <li><strong className="text-text">机会成本</strong>：持有 A vs 换仓 B；A 可选闲置现金或持仓，B 可从观察池一键带入并看全池排名。</li>
           <li><strong className="text-text">安全边际</strong>：保守估值 × 折扣，判断当前价是否买贵了。</li>
           <li><strong className="text-text">手续费曲线</strong>：小目标盈利时，手续费占毛利润的比例。</li>
         </ul>

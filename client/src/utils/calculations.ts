@@ -45,6 +45,23 @@ export function netSellProceeds(price: number, shares: number, board: Board, set
   return { amount, ...fee, net: amount - fee.total };
 }
 
+/** 给定买卖价，计算扣费后实际盈亏 */
+export function tradePnl(
+  buyPrice: number,
+  sellPrice: number,
+  shares: number,
+  board: Board,
+  settings: FeeSettings,
+) {
+  const buy = totalBuyCost(buyPrice, shares, board, settings);
+  const sell = netSellProceeds(sellPrice, shares, board, settings);
+  const pnl = sell.net - buy.totalCost;
+  const pnlPct = buy.totalCost > 0 ? (pnl / buy.totalCost) * 100 : 0;
+  const priceDiff = sellPrice - buyPrice;
+  const priceDiffPct = buyPrice > 0 ? (priceDiff / buyPrice) * 100 : 0;
+  return { buy, sell, pnl, pnlPct, priceDiff, priceDiffPct };
+}
+
 /** 回本需涨幅（含卖出费用） */
 export function breakEvenGainPct(costPrice: number, currentPrice: number, board: Board, settings: FeeSettings): number {
   if (currentPrice <= 0 || costPrice <= 0) return 0;
@@ -79,6 +96,218 @@ export function evAdvice(ev: number, ratio: number): { level: 'good' | 'ok' | 'b
     return { level: 'ok', text: '期望值一般，建议等更好机会' };
   }
   return { level: 'bad', text: '期望值为负，赔率不利，不建议操作' };
+}
+
+export type PricePositionLabel = '低位' | '中位' | '高位';
+
+/** 相对区间评估股价处于高位/低位 */
+export function assessPricePosition(
+  price: number,
+  refLow: number,
+  refHigh: number,
+): { score: number; label: PricePositionLabel } {
+  const range = refHigh - refLow;
+  if (range <= 0) return { score: 50, label: '中位' };
+  const score = Math.max(0, Math.min(100, ((price - refLow) / range) * 100));
+  const label: PricePositionLabel = score <= 30 ? '低位' : score >= 70 ? '高位' : '中位';
+  return { score, label };
+}
+
+export type WatchEntrySignal = 'ready' | 'near' | 'wait' | 'high';
+
+export interface WatchPoolInput {
+  triggerPrice: number;
+  refLow?: number;
+  refHigh?: number;
+  winProb: number;
+  gainPct: number;
+  lossPct: number;
+  maxBuyAmount?: number;
+}
+
+/** 观察池综合分析：触发价 + 期望值 + 高低位 */
+export function watchPoolAnalysis(
+  item: WatchPoolInput,
+  currentPrice: number,
+  board: Board,
+  settings: FeeSettings,
+) {
+  const refLow = item.refLow ?? item.triggerPrice * 0.85;
+  const refHigh = item.refHigh ?? item.triggerPrice * 1.25;
+  const position = assessPricePosition(currentPrice, refLow, refHigh);
+  const { ev, ratio } = expectedValue(item.winProb, item.gainPct, item.lossPct);
+  const advice = evAdvice(ev, ratio);
+
+  const atOrBelowTrigger = currentPrice <= item.triggerPrice;
+  const gapToTrigger = item.triggerPrice - currentPrice;
+  const gapToTriggerPct = item.triggerPrice > 0 ? (gapToTrigger / item.triggerPrice) * 100 : 0;
+
+  let entryScore = 0;
+  if (atOrBelowTrigger) entryScore += 40;
+  else entryScore += Math.max(0, 20 - Math.max(0, gapToTriggerPct));
+  if (ev > 5) entryScore += 30;
+  else if (ev >= 0) entryScore += 15;
+  if (position.label === '低位') entryScore += 30;
+  else if (position.label === '中位') entryScore += 15;
+  entryScore = Math.min(100, entryScore);
+
+  let signal: WatchEntrySignal;
+  if (atOrBelowTrigger && ev >= 0 && position.label !== '高位') signal = 'ready';
+  else if (gapToTriggerPct <= 3 && gapToTriggerPct >= -2 && ev >= 0) signal = 'near';
+  else if (position.label === '高位') signal = 'high';
+  else signal = 'wait';
+
+  const buyRateEst = buyRate(board, settings);
+  const estCostPerShare = currentPrice > 0 ? currentPrice * (1 + buyRateEst) : 0;
+  const suggestedShares =
+    item.maxBuyAmount && estCostPerShare > 0
+      ? Math.max(0, Math.floor(item.maxBuyAmount / estCostPerShare / 100) * 100)
+      : undefined;
+
+  return {
+    refLow,
+    refHigh,
+    positionScore: position.score,
+    positionLabel: position.label,
+    ev,
+    ratio,
+    advice,
+    atOrBelowTrigger,
+    gapToTrigger,
+    gapToTriggerPct,
+    entryScore,
+    signal,
+    suggestedShares,
+    estBuyAmount: suggestedShares ? suggestedShares * estCostPerShare : undefined,
+  };
+}
+
+export type OpportunitySideA =
+  | { mode: 'cash'; cashAmount: number }
+  | {
+      mode: 'position';
+      price: number;
+      shares: number;
+      board: Board;
+      winProb: number;
+      gainPct: number;
+      lossPct: number;
+    };
+
+/** 观察池标的买入计划：触发价或现价 + 建议股数 */
+export function resolveWatchBuyPlan(
+  item: WatchPoolInput & { board: Board },
+  currentPrice: number,
+  settings: FeeSettings,
+  priceMode: 'trigger' | 'current' = 'trigger',
+) {
+  const bPrice =
+    priceMode === 'trigger'
+      ? item.triggerPrice
+      : currentPrice > 0
+        ? currentPrice
+        : item.triggerPrice;
+  const analysis = watchPoolAnalysis(item, bPrice, item.board, settings);
+  const bShares = analysis.suggestedShares ?? 0;
+  return { bPrice, bShares, analysis };
+}
+
+/** 机会成本：持有 A（持仓或闲置现金）vs 买入观察池标的 B */
+export function opportunityCostScenario(
+  sideA: OpportunitySideA,
+  bWinProb: number,
+  bGainPct: number,
+  bLossPct: number,
+  bPrice: number,
+  bShares: number,
+  bBoard: Board,
+  settings: FeeSettings,
+) {
+  let aWin: number;
+  let aGain: number;
+  let aLoss: number;
+  let invested: number;
+  let swapFeeTotal: number;
+
+  if (sideA.mode === 'cash') {
+    aWin = 50;
+    aGain = 0;
+    aLoss = 0;
+    invested = sideA.cashAmount;
+    swapFeeTotal =
+      bShares > 0 && bPrice > 0
+        ? totalBuyCost(bPrice, bShares, bBoard, settings).total
+        : 0;
+  } else {
+    aWin = sideA.winProb;
+    aGain = sideA.gainPct;
+    aLoss = sideA.lossPct;
+    invested = sideA.price * sideA.shares;
+    swapFeeTotal =
+      bShares > 0
+        ? swapCost(sideA.price, sideA.shares, sideA.board, bPrice, bShares, bBoard, settings).total
+        : 0;
+  }
+
+  return {
+    ...opportunityCostCompare(aWin, aGain, aLoss, bWinProb, bGainPct, bLossPct, invested, swapFeeTotal),
+    invested,
+  };
+}
+
+/** 批量：当前 A 方案 vs 观察池全部标的 */
+export function compareWatchPoolOpportunity(
+  sideA: OpportunitySideA,
+  items: (WatchPoolInput & { id: string; name: string; code: string; board: Board })[],
+  quotes: Record<string, { price: number }>,
+  settings: FeeSettings,
+  priceMode: 'trigger' | 'current' = 'trigger',
+) {
+  return items
+    .map((item) => {
+      const q = quotes[item.code];
+      const currentPrice = q?.price ?? 0;
+      const plan = resolveWatchBuyPlan(item, currentPrice, settings, priceMode);
+      if (plan.bShares <= 0) return null;
+      const result = opportunityCostScenario(
+        sideA,
+        item.winProb,
+        item.gainPct,
+        item.lossPct,
+        plan.bPrice,
+        plan.bShares,
+        item.board,
+        settings,
+      );
+      return {
+        id: item.id,
+        name: item.name,
+        code: item.code,
+        ...plan,
+        ...result,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null)
+    .sort((a, b) => b.evDiffAdjusted - a.evDiffAdjusted);
+}
+
+/** 卖出回本/盈利目标价与涨幅 */
+export function sellRecoveryTargets(
+  costBasis: number,
+  shares: number,
+  currentPrice: number,
+  board: Board,
+  settings: FeeSettings,
+  targetProfit = 0,
+) {
+  if (shares <= 0 || costBasis <= 0 || currentPrice <= 0) return null;
+  const avgCost = costBasis / shares;
+  const breakEvenPrice = targetSellPrice(avgCost, shares, board, settings, 0);
+  const profitPrice =
+    targetProfit > 0 ? targetSellPrice(avgCost, shares, board, settings, targetProfit) : undefined;
+  const breakEvenRisePct = ((breakEvenPrice - currentPrice) / currentPrice) * 100;
+  const profitRisePct = profitPrice ? ((profitPrice - currentPrice) / currentPrice) * 100 : undefined;
+  return { avgCost, breakEvenPrice, profitPrice, breakEvenRisePct, profitRisePct };
 }
 
 /** Kelly 公式：f* = (bp - q) / b，b=盈亏比 */
@@ -196,6 +425,7 @@ export function stopLossAnalysis(
   currentPrice?: number,
   totalAssets?: number,
   partialSellShares?: number,
+  targetProfit = 500,
 ) {
   const buy = totalBuyCost(buyPrice, shares, board, settings);
   const stopPrice = stopLossPrice(buyPrice, shares, board, settings, maxLoss);
@@ -229,7 +459,11 @@ export function stopLossAnalysis(
       sellNet: number;
       remainingShares: number;
       remainingCost: number;
+      remainingMarketValue: number;
+      remainingWeightPct: number;
+      recovery?: NonNullable<ReturnType<typeof sellRecoveryTargets>>;
     };
+    recovery?: NonNullable<ReturnType<typeof sellRecoveryTargets>>;
   } = { stopPrice, lossAtStop, lossPctAtStop, warning };
 
   if (currentPrice != null && currentPrice > 0) {
@@ -249,18 +483,44 @@ export function stopLossAnalysis(
       impactPct,
       priceVsStop,
     };
+
+    result.recovery = sellRecoveryTargets(
+      buy.totalCost,
+      shares,
+      currentPrice,
+      board,
+      settings,
+      targetProfit,
+    ) ?? undefined;
   }
 
   if (partialSellShares != null && partialSellShares > 0 && partialSellShares < shares) {
     const px = currentPrice && currentPrice > 0 ? currentPrice : buyPrice;
     const sellPart = netSellProceeds(px, partialSellShares, board, settings);
     const costPart = (buy.totalCost / shares) * partialSellShares;
+    const remainingShares = shares - partialSellShares;
+    const remainingCost = buy.totalCost - costPart;
+    const remainingMarketValue = px * remainingShares;
+    const remainingWeightPct =
+      totalAssets && totalAssets > 0 ? (remainingMarketValue / totalAssets) * 100 : 0;
+    const recovery = sellRecoveryTargets(
+      remainingCost,
+      remainingShares,
+      px,
+      board,
+      settings,
+      targetProfit,
+    );
+
     result.partial = {
       shares: partialSellShares,
       loss: costPart - sellPart.net,
       sellNet: sellPart.net,
-      remainingShares: shares - partialSellShares,
-      remainingCost: buy.totalCost - costPart,
+      remainingShares,
+      remainingCost,
+      remainingMarketValue,
+      remainingWeightPct,
+      ...(recovery ? { recovery } : {}),
     };
   }
 
@@ -451,7 +711,63 @@ export function marginOfSafety(fairValue: number, marginPct: number, buyPrice: n
   return { maxAcceptablePrice, discountRate, inSafetyZone, needDropPct, premiumPct };
 }
 
-/** 手续费拖拽曲线数据点 */
+/** 给定目标净利润，计算手续费占毛利润比例 */
+export function computeFeeDragAtTarget(
+  buyPrice: number,
+  shares: number,
+  board: Board,
+  settings: FeeSettings,
+  targetProfit: number,
+) {
+  const buy = totalBuyCost(buyPrice, shares, board, settings);
+  const sellP = targetSellPrice(buyPrice, shares, board, settings, Math.max(0, targetProfit));
+  const sell = netSellProceeds(sellP, shares, board, settings);
+  const totalFee = buy.total + sell.total;
+  const netProfit = sell.net - buy.totalCost;
+  const grossProfit = netProfit + totalFee;
+  const feeRatio = grossProfit > 0 ? (totalFee / grossProfit) * 100 : 100;
+  return {
+    targetProfit,
+    sellPrice: sellP,
+    totalFee,
+    netProfit,
+    grossProfit,
+    feeRatio,
+    buyTotalCost: buy.totalCost,
+  };
+}
+
+/** 二分：达到「手续费/毛利润 ≤ ratioCap%」所需的最小目标盈利 */
+function minProfitForFeeRatioAtMost(
+  buyPrice: number,
+  shares: number,
+  board: Board,
+  settings: FeeSettings,
+  ratioCap: number,
+): number | null {
+  const buy = totalBuyCost(buyPrice, shares, board, settings);
+  if (buy.totalCost <= 0 || shares <= 0) return null;
+
+  const probe = (p: number) => computeFeeDragAtTarget(buyPrice, shares, board, settings, p).feeRatio;
+
+  let high = Math.max(200, buy.totalCost * 0.05);
+  while (high < buy.totalCost && probe(high) > ratioCap) {
+    high = Math.min(high * 2, buy.totalCost);
+  }
+  if (probe(high) > ratioCap) return null;
+
+  let low = 1;
+  if (probe(low) <= ratioCap) return Math.ceil(low * 100) / 100;
+
+  for (let i = 0; i < 64; i++) {
+    const mid = (low + high) / 2;
+    if (probe(mid) > ratioCap) low = mid;
+    else high = mid;
+  }
+  return Math.ceil(high * 100) / 100;
+}
+
+/** 手续费拖拽曲线：目标盈利 vs 手续费占毛利润比例 */
 export function feeDragCurve(
   buyPrice: number,
   shares: number,
@@ -460,25 +776,36 @@ export function feeDragCurve(
   steps = 40,
 ) {
   const buy = totalBuyCost(buyPrice, shares, board, settings);
-  const maxProfit = buy.totalCost * 0.5;
-  const points: { targetProfit: number; feeRatio: number; totalFee: number; netProfit: number }[] = [];
+  if (buy.totalCost <= 0 || shares <= 0) {
+    return {
+      points: [],
+      buyTotalCost: 0,
+      roundTripFeeAtCost: 0,
+      breakeven50: null,
+      minProfitUnder20Pct: null,
+    };
+  }
 
+  const roundTripFeeAtCost =
+    buy.total + sellFee(buy.amount, board, settings).total;
+
+  const minProfit = Math.max(50, roundTripFeeAtCost * 2);
+  const maxProfit = Math.max(minProfit * 4, buy.totalCost * 0.15);
+
+  const points: ReturnType<typeof computeFeeDragAtTarget>[] = [];
   for (let i = 1; i <= steps; i++) {
-    const targetProfit = (maxProfit * i) / steps;
-    const sellP = targetSellPrice(buyPrice, shares, board, settings, targetProfit);
-    const sell = netSellProceeds(sellP, shares, board, settings);
-    const totalFee = buy.total + sell.total;
-    const netProfit = sell.net - buy.totalCost;
-    const feeRatio = netProfit + totalFee > 0 ? (totalFee / (netProfit + totalFee)) * 100 : 100;
-    points.push({ targetProfit, feeRatio, totalFee, netProfit });
+    const targetProfit = minProfit + ((maxProfit - minProfit) * i) / steps;
+    points.push(computeFeeDragAtTarget(buyPrice, shares, board, settings, targetProfit));
   }
 
-  let breakeven50: number | null = null;
-  let minProfitUnder20Pct: number | null = null;
-  for (const p of points) {
-    if (breakeven50 === null && p.feeRatio <= 50) breakeven50 = p.targetProfit;
-    if (p.feeRatio <= 20) minProfitUnder20Pct = p.targetProfit;
-  }
+  const breakeven50 = minProfitForFeeRatioAtMost(buyPrice, shares, board, settings, 50);
+  const minProfitUnder20Pct = minProfitForFeeRatioAtMost(buyPrice, shares, board, settings, 20);
 
-  return { points, buyTotalCost: buy.totalCost, breakeven50, minProfitUnder20Pct };
+  return {
+    points,
+    buyTotalCost: buy.totalCost,
+    roundTripFeeAtCost,
+    breakeven50,
+    minProfitUnder20Pct,
+  };
 }

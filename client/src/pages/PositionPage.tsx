@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { usePortfolio } from '../hooks/usePortfolio';
+import { usePortfolioMetrics } from '../hooks/usePortfolioMetrics';
+import PortfolioMetricSelect from '../components/PortfolioMetricSelect';
+import type { PortfolioMetricKey } from '../hooks/usePortfolioMetrics';
 import { getEffectivePrice, useStockQuotes } from '../hooks/useStockQuotes';
+import { MAX_WATCH_POOL } from '../utils/constants';
 import { buyFee, positionMetrics, scenarioPnl, sellFee } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor } from '../utils/format';
 
@@ -15,26 +19,18 @@ const CHECKLIST = [
 
 export default function PositionPage() {
   const { id } = useParams();
-  const { data, positions, cashBalance, updatePortfolio } = usePortfolio();
+  const { data, positions, updatePortfolio, addPositionToWatchPool, isInWatchPool } = usePortfolio();
+  const { totalAssets: portfolioTotalAssets, stockMarketValue, cashBalance } = usePortfolioMetrics(id);
   const position = positions.find((p) => p.id === id);
   const { quotes } = useStockQuotes(position ? [position.code] : [], data.settings.refreshIntervalSec);
 
   const [scenarioPct, setScenarioPct] = useState(0);
   const [checked, setChecked] = useState<boolean[]>(CHECKLIST.map(() => false));
+  const [fundKey, setFundKey] = useState<PortfolioMetricKey>('totalAssets');
+  const [customFund, setCustomFund] = useState(0);
+  const [fundBase, setFundBase] = useState(portfolioTotalAssets);
 
-  const stockMarketValue = useMemo(() => {
-    return positions.reduce((sum, p) => {
-      const px = getEffectivePrice(p.code, quotes, p.manualPrice).price;
-      return sum + px * p.shares;
-    }, 0);
-  }, [positions, quotes]);
-
-  const totalAssets = stockMarketValue + cashBalance;
-  const [totalAssetsInput, setTotalAssetsInput] = useState(totalAssets);
-
-  useEffect(() => {
-    setTotalAssetsInput(totalAssets);
-  }, [totalAssets]);
+  const totalAssets = portfolioTotalAssets;
 
   const enriched = useMemo(() => {
     if (!position) return null;
@@ -59,10 +55,10 @@ export default function PositionPage() {
       scenarioPrice,
       position.board,
       data.settings,
-      totalAssetsInput,
+      fundBase,
     );
     return { price, isClosed, metrics, changePct, buyF, sellF, scenario, scenarioPrice };
-  }, [position, quotes, data, scenarioPct, totalAssetsInput, totalAssets]);
+  }, [position, quotes, data, scenarioPct, fundBase, totalAssets]);
 
   if (!position || !enriched) {
     return (
@@ -96,10 +92,30 @@ export default function PositionPage() {
     }));
   };
 
+  const addToWatch = () => {
+    if (!position) return;
+    const r = addPositionToWatchPool(position.id, quotes);
+    if (r === 'ok') alert('已加入观察池');
+    else if (r === 'duplicate') alert('已在观察池中');
+    else if (r === 'full') alert(`观察池已满（最多 ${MAX_WATCH_POOL} 只）`);
+  };
+
   return (
     <div className="space-y-4">
       <Link to="/" className="text-sm text-blue-600">← 返回持仓</Link>
-      <h1 className="text-xl font-bold">{position.name} ({position.code})</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold">{position.name} ({position.code})</h1>
+        <div className="flex gap-2 text-sm">
+          {!isInWatchPool(position.code) ? (
+            <button type="button" className="btn-ghost text-xs" onClick={addToWatch}>
+              加入观察池
+            </button>
+          ) : (
+            <Link to="/watch" className="btn-ghost text-xs">已在观察池 →</Link>
+          )}
+          <Link to="/calculator" className="btn-ghost text-xs">去计算器</Link>
+        </div>
+      </div>
 
       <div className="card grid gap-3 md:grid-cols-3 text-sm">
         <Item label="成本价" value={`¥${formatMoney(position.costPrice)}`} />
@@ -142,15 +158,17 @@ export default function PositionPage() {
           <Item label="对总资金影响" value={formatPct(enriched.scenario.impact)} />
           <Item label="回本需涨" value={formatPct(enriched.scenario.breakEvenGainPct)} />
         </div>
-        <div>
-          <label className="label">总资金（市值 {formatMoney(stockMarketValue)} + 余额 {formatMoney(cashBalance)}）</label>
-          <input
-            className="input max-w-xs"
-            type="number"
-            value={totalAssetsInput}
-            onChange={(e) => setTotalAssetsInput(Number(e.target.value))}
-          />
-        </div>
+        <PortfolioMetricSelect
+          label="情景模拟 · 总资金基准"
+          metricKey={fundKey}
+          onMetricKeyChange={setFundKey}
+          customValue={customFund}
+          onCustomValueChange={setCustomFund}
+          onResolvedChange={setFundBase}
+          positionId={id}
+          allowedKeys={['totalAssets', 'cashBalance', 'stockMarketValue', 'positionMarketValue', 'custom']}
+          hint={`市值 ${formatMoney(stockMarketValue)} + 余额 ${formatMoney(cashBalance)}`}
+        />
       </div>
 
       <div className="card space-y-3">

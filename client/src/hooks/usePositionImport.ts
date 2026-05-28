@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
-import type { PositionImportPayload } from '../types';
+import type { StockImportPayload } from '../types';
 
 export function usePositionImport(
-  payload: PositionImportPayload | null,
+  payload: StockImportPayload | null,
   tick: number,
-  apply: (p: PositionImportPayload) => void,
+  apply: (p: StockImportPayload) => void,
 ) {
   useEffect(() => {
     if (payload && tick > 0) apply(payload);

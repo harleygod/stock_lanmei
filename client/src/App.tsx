@@ -9,6 +9,7 @@ import PositionPage from './pages/PositionPage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
 import GuidePage from './pages/GuidePage';
+import WatchPoolPage from './pages/WatchPoolPage';
 
 function NavLink({ to, isActive, label, badge, navigate }: { to: string; isActive: boolean; label: string; badge?: number; navigate: (to: string) => void }) {
   return (
@@ -59,6 +60,7 @@ function Layout() {
 
   const nav = [
     { to: '/home', label: '持仓' },
+    { to: '/watch', label: '观察池' },
     { to: '/calculator', label: '计算器' },
     { to: '/guide', label: '说明' },
     { to: '/logs', label: '日志', badge: pendingReady },
@@ -142,6 +144,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="home" element={<HomePage />} />
+        <Route path="watch" element={<WatchPoolPage />} />
         <Route path="calculator" element={<CalculatorPage />} />
         <Route path="position/:id" element={<PositionPage />} />
         <Route path="logs" element={<LogsPage />} />

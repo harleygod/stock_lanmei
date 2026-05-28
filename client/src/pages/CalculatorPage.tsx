@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAppContext } from '../hooks/useAppContext';
-import { usePortfolio } from '../hooks/usePortfolio';
-import PositionImportBar from '../components/PositionImportBar';
-import type { Board, PositionImportPayload } from '../types';
+import { usePortfolioMetrics } from '../hooks/usePortfolioMetrics';
+import StockImportBar from '../components/StockImportBar';
+import PortfolioMetricSelect from '../components/PortfolioMetricSelect';
+import type { Board, StockImportPayload } from '../types';
+import type { PortfolioMetricKey } from '../hooks/usePortfolioMetrics';
 import {
   batchSellPlan,
   evAdvice,
@@ -14,6 +16,7 @@ import {
   stopLossAnalysis,
   targetSellPrice,
   totalBuyCost,
+  tradePnl,
   weightedAverageCost,
 } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor } from '../utils/format';
@@ -23,9 +26,10 @@ import MarginOfSafetyTab from '../components/calc/MarginOfSafetyTab';
 import FeeDragTab from '../components/calc/FeeDragTab';
 import MungerQuote from '../components/MungerQuote';
 
-type Tab = 'ev' | 'profit' | 'stop' | 'batch' | 'cost' | 'matrix' | 'opp' | 'mos' | 'fee';
+type Tab = 'pnl' | 'ev' | 'profit' | 'stop' | 'batch' | 'cost' | 'matrix' | 'opp' | 'mos' | 'fee';
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'pnl', label: '买卖盈亏' },
   { id: 'ev', label: '期望值' },
   { id: 'profit', label: '盈利目标' },
   { id: 'stop', label: '止损' },
@@ -38,22 +42,14 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function CalculatorPage() {
-  const [tab, setTab] = useState<Tab>('ev');
+  const [tab, setTab] = useState<Tab>('pnl');
   const { data } = useAppContext();
-  const { positions } = usePortfolio();
   const settings = data.settings;
-  const [importPayload, setImportPayload] = useState<PositionImportPayload | null>(null);
+  const [importPayload, setImportPayload] = useState<StockImportPayload | null>(null);
   const [importTick, setImportTick] = useState(0);
 
-  const handleImport = (p: { id: string; name: string; code: string; costPrice: number; shares: number; board: Board }) => {
-    setImportPayload({
-      id: p.id,
-      name: p.name,
-      code: p.code,
-      price: p.costPrice,
-      shares: p.shares,
-      board: p.board,
-    });
+  const handleImport = (p: StockImportPayload) => {
+    setImportPayload(p);
     setImportTick((t) => t + 1);
   };
 
@@ -62,7 +58,7 @@ export default function CalculatorPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">计算器中心</h1>
-      <PositionImportBar positions={positions} onImport={handleImport} />
+      <StockImportBar onImport={handleImport} />
       <div className="flex gap-2 overflow-x-auto border-b border-border pb-1">
         {TABS.map((t) => (
           <button
@@ -75,17 +71,99 @@ export default function CalculatorPage() {
           </button>
         ))}
       </div>
+      {tab === 'pnl' && <PnlCalculator settings={settings} {...importProps} />}
       {tab === 'ev' && <EVCalculator />}
       {tab === 'profit' && <ProfitCalculator settings={settings} {...importProps} />}
       {tab === 'stop' && <StopCalculator settings={settings} {...importProps} />}
       {tab === 'batch' && <BatchCalculator settings={settings} {...importProps} />}
       {tab === 'cost' && <CostCalculator settings={settings} {...importProps} />}
       {tab === 'matrix' && <MatrixCalculator {...importProps} />}
-      {tab === 'opp' && <OpportunityCostTab settings={settings} />}
+      {tab === 'opp' && <OpportunityCostTab settings={settings} {...importProps} />}
       {tab === 'mos' && <MarginOfSafetyTab settings={settings} {...importProps} />}
       {tab === 'fee' && <FeeDragTab settings={settings} {...importProps} />}
 
       <MungerQuote />
+    </div>
+  );
+}
+
+function PnlCalculator({
+  settings,
+  importPayload,
+  importTick,
+}: {
+  settings: typeof import('../types').DEFAULT_SETTINGS;
+  importPayload: StockImportPayload | null;
+  importTick: number;
+}) {
+  const [buyPrice, setBuyPrice] = useState(10);
+  const [sellPrice, setSellPrice] = useState(11);
+  const [shares, setShares] = useState(1000);
+  const [board, setBoard] = useState<Board>('sz_main');
+
+  const applyImport = useCallback((p: StockImportPayload) => {
+    if (p.source === 'watch') {
+      setBuyPrice(p.triggerPrice ?? p.price);
+      setSellPrice(p.price);
+    } else {
+      setBuyPrice(p.price);
+    }
+    setShares(p.shares);
+    setBoard(p.board);
+  }, []);
+
+  useEffect(() => {
+    if (importPayload && importTick > 0) applyImport(importPayload);
+  }, [importTick, importPayload, applyImport]);
+
+  const { buy, sell, pnl, pnlPct, priceDiff, priceDiffPct } = tradePnl(
+    buyPrice,
+    sellPrice,
+    shares,
+    board,
+    settings,
+  );
+  const pnlLabel = pnl >= 0 ? '赚' : '亏';
+
+  return (
+    <div className="card space-y-4">
+      <p className="text-sm text-muted">
+        输入买入价和卖出价，立即算出扣费后的实际盈亏（含佣金、印花税、过户费）。
+      </p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="买入价格" value={buyPrice} onChange={setBuyPrice} step={0.01} />
+        <Field label="卖出价格" value={sellPrice} onChange={setSellPrice} step={0.01} />
+        <Field label="股数" value={shares} onChange={setShares} />
+        <BoardSelect board={board} onChange={setBoard} />
+      </div>
+
+      <div className={`rounded-xl border p-4 text-center ${pnl >= 0 ? 'border-profit/30 bg-green-50 dark:bg-green-950/20' : 'border-loss/30 bg-red-50 dark:bg-red-950/20'}`}>
+        <div className="text-sm text-muted">实际{pnlLabel}（扣全部费用后）</div>
+        <div className={`text-3xl font-bold ${pnlColor(pnl)}`}>
+          {pnlLabel} ¥{formatMoney(Math.abs(pnl))}
+        </div>
+        <div className={`mt-1 text-lg ${pnlColor(pnl)}`}>{formatPct(pnlPct)}</div>
+        <div className="mt-2 text-sm text-muted">
+          价差 {priceDiff >= 0 ? '+' : ''}¥{formatMoney(priceDiff)}/股（{formatPct(priceDiffPct)}）
+        </div>
+      </div>
+
+      <div className="grid gap-2 text-sm md:grid-cols-2">
+        <DetailBlock title="买入明细" items={[
+          ['买入金额', formatMoney(buy.amount)],
+          ['佣金', formatMoney(buy.commission)],
+          ...(isShanghai(board) ? [['过户费', formatMoney(buy.transfer!)]] : []),
+          ['买入总成本', formatMoney(buy.totalCost)],
+        ]} />
+        <DetailBlock title="卖出明细" items={[
+          ['卖出金额', formatMoney(sell.amount)],
+          ['印花税', formatMoney(sell.stampTax!)],
+          ['佣金', formatMoney(sell.commission!)],
+          ...(isShanghai(board) ? [['过户费', formatMoney(sell.transfer!)]] : []),
+          ['到手净额', formatMoney(sell.net)],
+        ]} />
+      </div>
+      <ResultBox title="手续费合计" value={`¥${formatMoney(buy.total + sell.total)}`} />
     </div>
   );
 }
@@ -129,7 +207,7 @@ function ProfitCalculator({
   importTick,
 }: {
   settings: typeof import('../types').DEFAULT_SETTINGS;
-  importPayload: PositionImportPayload | null;
+  importPayload: StockImportPayload | null;
   importTick: number;
 }) {
   const [price, setPrice] = useState(10);
@@ -137,7 +215,7 @@ function ProfitCalculator({
   const [board, setBoard] = useState<Board>('sz_main');
   const [targetProfit, setTargetProfit] = useState(500);
 
-  const applyImport = useCallback((p: PositionImportPayload) => {
+  const applyImport = useCallback((p: StockImportPayload) => {
     setPrice(p.price);
     setShares(p.shares);
     setBoard(p.board);
@@ -192,27 +270,33 @@ function StopCalculator({
   importTick,
 }: {
   settings: typeof import('../types').DEFAULT_SETTINGS;
-  importPayload: PositionImportPayload | null;
+  importPayload: StockImportPayload | null;
   importTick: number;
 }) {
-  const { cashBalance } = usePortfolio();
+  const { stockMarketValue, cashBalance } = usePortfolioMetrics(
+    importPayload?.source === 'position' ? importPayload.id : undefined,
+  );
+  const [fundKey, setFundKey] = useState<PortfolioMetricKey>('totalAssets');
+  const [customFund, setCustomFund] = useState(0);
+  const [fundBase, setFundBase] = useState(0);
   const [price, setPrice] = useState(10);
   const [shares, setShares] = useState(1000);
   const [board, setBoard] = useState<Board>('sz_main');
   const [currentPrice, setCurrentPrice] = useState(0);
-  const [totalAssets, setTotalAssets] = useState(100000);
   const [maxLoss, setMaxLoss] = useState(2000);
   const [partialShares, setPartialShares] = useState(100);
+  const [targetProfit, setTargetProfit] = useState(500);
 
   useEffect(() => {
     if (importPayload && importTick > 0) {
       setPrice(importPayload.price);
       setShares(importPayload.shares);
       setBoard(importPayload.board);
-      const posValue = importPayload.price * importPayload.shares;
-      setTotalAssets(Math.round(posValue + cashBalance));
+      if (importPayload.source === 'watch' && importPayload.triggerPrice) {
+        setCurrentPrice(importPayload.price);
+      }
     }
-  }, [importTick, importPayload, cashBalance]);
+  }, [importTick, importPayload]);
 
   const partial = partialShares > 0 && partialShares < shares ? partialShares : 0;
   const analysis = stopLossAnalysis(
@@ -222,28 +306,40 @@ function StopCalculator({
     settings,
     maxLoss,
     currentPrice > 0 ? currentPrice : undefined,
-    totalAssets,
+    fundBase,
     partial > 0 ? partial : undefined,
+    targetProfit,
   );
 
   const recovery = recoveryAfterLossPct(-analysis.lossPctAtStop);
-  const impactAtStop = totalAssets > 0 ? (analysis.lossAtStop / totalAssets) * 100 : 0;
+  const impactAtStop = fundBase > 0 ? (analysis.lossAtStop / fundBase) * 100 : 0;
 
   return (
     <div className="card space-y-4">
       <p className="text-sm text-muted">
         设定「最多亏多少」反推止损价；填入<strong>现价</strong>看是否该卖，填<strong>减仓股数</strong>看部分卖出效果。
-        想分批卖完整方案 → 切到「分批卖出」Tab。
       </p>
+
+      <PortfolioMetricSelect
+        label="总资金基准（影响占比计算）"
+        metricKey={fundKey}
+        onMetricKeyChange={setFundKey}
+        customValue={customFund}
+        onCustomValueChange={setCustomFund}
+        onResolvedChange={setFundBase}
+        positionId={importPayload?.source === 'position' ? importPayload.id : undefined}
+        allowedKeys={['totalAssets', 'cashBalance', 'stockMarketValue', 'positionMarketValue', 'custom']}
+        hint={`主页：市值 ¥${formatMoney(stockMarketValue)} + 余额 ¥${formatMoney(cashBalance)}`}
+      />
 
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="买入成本价" value={price} onChange={setPrice} step={0.01} />
         <Field label="持仓股数" value={shares} onChange={setShares} />
         <Field label="当前现价" value={currentPrice} onChange={setCurrentPrice} step={0.01} />
         <BoardSelect board={board} onChange={setBoard} />
-        <Field label="总资金（市值+现金，算影响比例）" value={totalAssets} onChange={setTotalAssets} />
         <Field label="最大可承受亏损 (元)" value={maxLoss} onChange={setMaxLoss} />
         <Field label="拟减仓股数（可选）" value={partialShares} onChange={setPartialShares} />
+        <Field label="盈利目标 (元，算需涨多少)" value={targetProfit} onChange={setTargetProfit} />
       </div>
 
       {analysis.warning && (
@@ -277,16 +373,54 @@ function StopCalculator({
           <p className={analysis.current.triggered ? 'text-loss font-medium' : 'text-muted'}>
             {analysis.current.priceVsStop}
           </p>
+          {analysis.recovery && (
+            <div className="grid gap-2 border-t border-border pt-2 md:grid-cols-2">
+              <div>
+                <span className="text-muted">回本需涨至 </span>
+                <span className="font-medium">¥{formatMoney(analysis.recovery.breakEvenPrice)}</span>
+                <span className="text-muted"> ({formatPct(analysis.recovery.breakEvenRisePct)})</span>
+              </div>
+              {analysis.recovery.profitPrice != null && (
+                <div>
+                  <span className="text-muted">赚 ¥{formatMoney(targetProfit)} 需涨至 </span>
+                  <span className="font-medium">¥{formatMoney(analysis.recovery.profitPrice)}</span>
+                  <span className="text-muted"> ({formatPct(analysis.recovery.profitRisePct!)})</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {analysis.partial && currentPrice > 0 && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-1 text-sm dark:border-blue-900 dark:bg-blue-950/20">
+        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-2 text-sm dark:border-blue-900 dark:bg-blue-950/20">
           <div className="font-medium">减仓 {analysis.partial.shares} 股 @ ¥{formatMoney(currentPrice)}</div>
           <div>到手 ¥{formatMoney(analysis.partial.sellNet)} · 该部分亏损 ¥{formatMoney(analysis.partial.loss)}</div>
           <div className="text-muted">
             剩余 {analysis.partial.remainingShares} 股 · 剩余成本约 ¥{formatMoney(analysis.partial.remainingCost)}
           </div>
+          <div>
+            <span className="text-muted">剩余持仓市值 </span>
+            <span>¥{formatMoney(analysis.partial.remainingMarketValue)}</span>
+            <span className="text-muted"> · 占总资产 </span>
+            <span className="font-medium">{formatPct(analysis.partial.remainingWeightPct)}</span>
+          </div>
+          {analysis.partial.recovery && (
+            <div className="grid gap-2 border-t border-blue-200 pt-2 dark:border-blue-900 md:grid-cols-2">
+              <div>
+                <span className="text-muted">剩余仓位回本需涨至 </span>
+                <span className="font-medium">¥{formatMoney(analysis.partial.recovery.breakEvenPrice)}</span>
+                <span className="text-muted"> ({formatPct(analysis.partial.recovery.breakEvenRisePct)})</span>
+              </div>
+              {analysis.partial.recovery.profitPrice != null && (
+                <div>
+                  <span className="text-muted">赚 ¥{formatMoney(targetProfit)} 需涨至 </span>
+                  <span className="font-medium">¥{formatMoney(analysis.partial.recovery.profitPrice)}</span>
+                  <span className="text-muted"> ({formatPct(analysis.partial.recovery.profitRisePct!)})</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -303,7 +437,7 @@ function BatchCalculator({
   importTick,
 }: {
   settings: typeof import('../types').DEFAULT_SETTINGS;
-  importPayload: PositionImportPayload | null;
+  importPayload: StockImportPayload | null;
   importTick: number;
 }) {
   const [avgCost, setAvgCost] = useState(10);
@@ -380,7 +514,7 @@ function CostCalculator({
   importTick,
 }: {
   settings: typeof import('../types').DEFAULT_SETTINGS;
-  importPayload: PositionImportPayload | null;
+  importPayload: StockImportPayload | null;
   importTick: number;
 }) {
   const [lots, setLots] = useState([{ price: 10, shares: 500 }, { price: 9.5, shares: 500 }]);

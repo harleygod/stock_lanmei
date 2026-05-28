@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { marginOfSafety } from '../../utils/calculations';
 import { formatMoney, formatPct } from '../../utils/format';
 import { Field, ResultBox, type CalcSettings } from './Shared';
-import type { PositionImportPayload } from '../../types';
+import type { StockImportPayload } from '../../types';
 
 export default function MarginOfSafetyTab({
   importPayload,
   importTick,
 }: {
   settings: CalcSettings;
-  importPayload?: PositionImportPayload | null;
+  importPayload?: StockImportPayload | null;
   importTick?: number;
 }) {
   const [fairValue, setFairValue] = useState(20);

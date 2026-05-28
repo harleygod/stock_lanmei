@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { usePortfolio } from '../hooks/usePortfolio';
+import { MAX_WATCH_POOL } from '../utils/constants';
 import { getEffectivePrice, useStockQuotes } from '../hooks/useStockQuotes';
 import { herfindahlIndex, positionMetrics } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor, uid } from '../utils/format';
@@ -27,7 +28,7 @@ function weightColor(w: number) {
 }
 
 export default function HomePage() {
-  const { data, positions, portfolio, cashBalance, updatePortfolio, setCashBalance } = usePortfolio();
+  const { data, positions, portfolio, cashBalance, updatePortfolio, setCashBalance, addPositionToWatchPool, isInWatchPool } = usePortfolio();
   const codes = positions.map((p) => p.code);
   const { quotes, loading, error, manualMode, refresh } = useStockQuotes(
     codes,
@@ -131,6 +132,13 @@ export default function HomePage() {
   const removePosition = (id: string) => {
     if (!confirm('删除该持仓？')) return;
     updatePortfolio((p) => ({ ...p, positions: p.positions.filter((x) => x.id !== id) }));
+  };
+
+  const addToWatch = (id: string) => {
+    const r = addPositionToWatchPool(id, quotes);
+    if (r === 'ok') alert('已加入观察池，可在「观察池」页编辑触发价与理由');
+    else if (r === 'duplicate') alert('该股票已在观察池中');
+    else if (r === 'full') alert(`观察池已满（最多 ${MAX_WATCH_POOL} 只）`);
   };
 
   return (
@@ -279,9 +287,16 @@ export default function HomePage() {
                     {e.metrics.pnl < 0 ? formatPct(e.metrics.breakEvenGainPct) : '—'}
                   </td>
                   <td>
-                    <button type="button" className="text-xs text-loss" onClick={() => removePosition(e.position.id)}>
-                      删除
-                    </button>
+                    <div className="flex flex-col gap-1">
+                      {!isInWatchPool(e.position.code) && (
+                        <button type="button" className="text-xs text-blue-600" onClick={() => addToWatch(e.position.id)}>
+                          加入观察池
+                        </button>
+                      )}
+                      <button type="button" className="text-xs text-loss" onClick={() => removePosition(e.position.id)}>
+                        删除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

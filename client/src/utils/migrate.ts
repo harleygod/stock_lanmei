@@ -23,6 +23,7 @@ export function migrateData(raw: LegacyV1): AppDataV2 {
       portfolios: raw.portfolios.map((p) => ({
         ...p,
         cashBalance: p.cashBalance ?? 0,
+        watchPool: p.watchPool ?? [],
       })),
       activePortfolioId: raw.activePortfolioId ?? raw.portfolios[0].id,
       pendingOps: raw.pendingOps ?? [],
