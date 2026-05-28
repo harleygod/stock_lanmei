@@ -1,5 +1,5 @@
-import { Outlet, Route, Routes, useLocation, Navigate } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { Outlet, Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useAppData } from './hooks/useAppData';
 import DisclaimerFooter from './components/DisclaimerFooter';
 import { isPendingReady } from './utils/migrate';
@@ -10,14 +10,11 @@ import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
 import GuidePage from './pages/GuidePage';
 
-function NavLink({ to, isActive, label, badge }: { to: string; isActive: boolean; label: string; badge?: number }) {
+function NavLink({ to, isActive, label, badge, navigate }: { to: string; isActive: boolean; label: string; badge?: number; navigate: (to: string) => void }) {
   return (
     <button
       type="button"
-      onClick={() => {
-        if (window.location.hash.slice(1) === to || (to === '/home' && (window.location.hash === '#/' || window.location.hash === ''))) return;
-        window.location.hash = to;
-      }}
+      onClick={() => { if (!isActive) navigate(to); }}
       className={isActive ? 'text-blue-600 font-medium' : 'text-muted hover:text-text'}
       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
     >
@@ -32,6 +29,7 @@ function NavLink({ to, isActive, label, badge }: { to: string; isActive: boolean
 function Layout() {
   const { data, update } = useAppData();
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', data.settings.theme === 'dark');
@@ -52,6 +50,13 @@ function Layout() {
     [data.pendingOps, data.activePortfolioId],
   );
 
+  const goHome = useCallback(() => { navigate('/home'); }, [navigate]);
+
+  const isActive = useCallback(
+    (to: string) => to === '/home' ? location.pathname === '/home' || location.pathname === '/' : location.pathname.startsWith(to),
+    [location.pathname],
+  );
+
   const nav = [
     { to: '/home', label: '持仓' },
     { to: '/calculator', label: '计算器' },
@@ -66,19 +71,16 @@ function Layout() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <button
             type="button"
-            onClick={() => { window.location.hash = '#/'; }}
+            onClick={goHome}
             className="text-lg font-bold text-blue-600"
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
             决策助手
           </button>
           <nav className="hidden gap-4 md:flex">
-            {nav.map((n) => {
-              const isActive = n.to === '/home' ? location.pathname === '/home' || location.pathname === '/' : location.pathname.startsWith(n.to);
-              return (
-                <NavLink key={n.to} to={n.to} isActive={isActive} label={n.label} badge={n.badge} />
-              );
-            })}
+            {nav.map((n) => (
+              <NavLink key={n.to} to={n.to} isActive={isActive(n.to)} label={n.label} badge={n.badge} navigate={navigate} />
+            ))}
           </nav>
           {data.portfolios.length <= 1 ? (
             <span className="hidden text-xs text-muted md:inline">
@@ -111,16 +113,13 @@ function Layout() {
 
       <nav className="fixed bottom-0 left-0 right-0 flex border-t border-border bg-surface md:hidden z-50" style={{ touchAction: 'manipulation' }}>
         {nav.map((n) => {
-          const isActive = n.to === '/home' ? location.pathname === '/home' || location.pathname === '/' : location.pathname.startsWith(n.to);
+          const active = isActive(n.to);
           return (
             <button
               key={n.to}
               type="button"
-              onClick={() => {
-                if (window.location.hash.slice(1) === n.to || (n.to === '/home' && (window.location.hash === '#/' || window.location.hash === ''))) return;
-                window.location.hash = n.to;
-              }}
-              className={`flex-1 py-3 text-center text-xs ${isActive ? 'text-blue-600 font-medium' : 'text-muted'}`}
+              onClick={() => { if (!active) navigate(n.to); }}
+              className={`flex-1 py-3 text-center text-xs ${active ? 'text-blue-600 font-medium' : 'text-muted'}`}
               style={{ background: 'none', border: 'none', cursor: 'pointer' }}
             >
               <span className="relative inline-block">
