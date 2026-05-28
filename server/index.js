@@ -3,10 +3,13 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { loadData, saveData, dbStatus } from './db.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.use(express.json({ limit: '2mb' }));
 app.use(cors());
 
 const FETCH_HEADERS = {
@@ -157,6 +160,25 @@ async function fetchQuote(symbol) {
   }
   throw new Error(errors.join('; '));
 }
+
+// ======== Data API ========
+app.get('/api/data', (_req, res) => {
+  const data = loadData();
+  res.json({ ok: true, data });
+});
+
+app.post('/api/data', (req, res) => {
+  try {
+    saveData(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/data/status', (_req, res) => {
+  res.json(dbStatus());
+});
 
 app.get('/api/quote/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toLowerCase();

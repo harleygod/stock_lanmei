@@ -3,8 +3,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-profit: #16a34a;
-  --color-loss: #dc2626;
+  --color-profit: #dc2626;
+  --color-loss: #16a34a;
   --color-warn: #ea580c;
   --color-muted: #6b7280;
   --color-surface: #ffffff;
@@ -54,3 +54,7 @@ body {
 .text-loss { color: var(--color-loss); }
 .text-warn { color: var(--color-warn); }
 .text-muted { color: var(--color-muted); }
+
+/* Prevent Recharts SVG from stealing touch events on mobile */
+.recharts-surface { pointer-events: none !important; }
+.recharts-tooltip-wrapper { pointer-events: auto !important; }

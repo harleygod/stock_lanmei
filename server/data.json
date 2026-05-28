@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "portfolios": [
+    {
+      "id": "f9374e54-ebed-46d5-8cbf-ac2a1a42dda3",
+      "name": "默认组合",
+      "positions": [
+        {
+          "id": "830a6860-8c03-4cb7-ad68-5597f7033398",
+          "name": "立讯精密",
+          "code": "002475",
+          "costPrice": 77.78,
+          "shares": 300,
+          "board": "sz_main",
+          "note": "",
+          "createdAt": "2026-05-28T05:52:32.460Z",
+          "updatedAt": "2026-05-28T05:52:32.460Z"
+        }
+      ],
+      "logs": [],
+      "cashBalance": 20000,
+      "createdAt": "2026-05-28T05:22:38.680Z"
+    }
+  ],
+  "activePortfolioId": "f9374e54-ebed-46d5-8cbf-ac2a1a42dda3",
+  "pendingOps": [],
+  "settings": {
+    "commissionRate": 0.0001154,
+    "minCommission": true,
+    "stampTaxRate": 0.001,
+    "theme": "dark",
+    "refreshIntervalSec": 15,
+    "cooldownHours": 24,
+    "cooldownEnabled": true
+  },
+  "_savedAt": "2026-05-28T06:10:06.484Z"
+}
