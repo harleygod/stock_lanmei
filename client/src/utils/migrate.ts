@@ -20,7 +20,10 @@ export function migrateData(raw: LegacyV1): AppDataV2 {
   if (raw.version === 2 && raw.portfolios?.length) {
     return {
       version: 2,
-      portfolios: raw.portfolios,
+      portfolios: raw.portfolios.map((p) => ({
+        ...p,
+        cashBalance: p.cashBalance ?? 0,
+      })),
       activePortfolioId: raw.activePortfolioId ?? raw.portfolios[0].id,
       pendingOps: raw.pendingOps ?? [],
       settings,

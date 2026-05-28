@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import {
   PieChart,
   Pie,
@@ -16,9 +17,8 @@ import { herfindahlIndex, positionMetrics } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor, uid } from '../utils/format';
 import { boardLabel, inferBoard } from '../utils/stockCode';
 import type { Board, Position } from '../types';
-import { useMemo, useState } from 'react';
 
-const COLORS = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#dc2626'];
+const COLORS = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#dc2626', '#64748b'];
 
 function weightColor(w: number) {
   if (w >= 35) return '#dc2626';
@@ -27,7 +27,7 @@ function weightColor(w: number) {
 }
 
 export default function HomePage() {
-  const { data, positions, portfolio, updatePortfolio } = usePortfolio();
+  const { data, positions, portfolio, cashBalance, updatePortfolio, setCashBalance } = usePortfolio();
   const codes = positions.map((p) => p.code);
   const { quotes, loading, error, manualMode, refresh } = useStockQuotes(
     codes,
@@ -49,7 +49,8 @@ export default function HomePage() {
       const { price, isClosed, source } = getEffectivePrice(p.code, quotes, p.manualPrice);
       return { position: p, price, isClosed, source };
     });
-    const totalValue = items.reduce((s, i) => s + i.price * i.position.shares, 0);
+    const stockMarketValue = items.reduce((s, i) => s + i.price * i.position.shares, 0);
+    const totalAssets = stockMarketValue + cashBalance;
     return items.map((i) => ({
       ...i,
       metrics: positionMetrics(
@@ -58,28 +59,41 @@ export default function HomePage() {
         i.position.shares,
         i.position.board,
         data.settings,
-        totalValue,
+        totalAssets,
       ),
     }));
-  }, [positions, data.settings, quotes]);
+  }, [positions, data.settings, quotes, cashBalance]);
 
   const totalInvest = enriched.reduce((s, e) => s + e.metrics.buyCost, 0);
   const totalValue = enriched.reduce((s, e) => s + e.metrics.marketValue, 0);
+  const totalAssets = totalValue + cashBalance;
+  const cashWeight = totalAssets > 0 ? (cashBalance / totalAssets) * 100 : 0;
   const totalPnl = enriched.reduce((s, e) => s + e.metrics.pnl, 0);
   const totalPnlPct = totalInvest > 0 ? (totalPnl / totalInvest) * 100 : 0;
-  const hhi = herfindahlIndex(enriched.map((e) => e.metrics.marketValue));
+  const hhiWeights = [...enriched.map((e) => e.metrics.marketValue), ...(cashBalance > 0 ? [cashBalance] : [])];
+  const hhi = herfindahlIndex(hhiWeights);
 
-  const pieData = enriched.map((e) => ({
-    name: e.position.name || e.position.code,
-    value: e.metrics.marketValue,
-    weight: e.metrics.weight,
-  }));
+  const pieData = [
+    ...enriched.map((e) => ({
+      name: e.position.name || e.position.code,
+      value: e.metrics.marketValue,
+      weight: e.metrics.weight,
+    })),
+    ...(cashBalance > 0
+      ? [{ name: '现金', value: cashBalance, weight: cashWeight }]
+      : []),
+  ];
 
-  const barData = enriched.map((e) => ({
-    name: (e.position.name || e.position.code).slice(0, 6),
-    weight: e.metrics.weight,
-    fill: weightColor(e.metrics.weight),
-  }));
+  const barData = [
+    ...enriched.map((e) => ({
+      name: (e.position.name || e.position.code).slice(0, 6),
+      weight: e.metrics.weight,
+      fill: weightColor(e.metrics.weight),
+    })),
+    ...(cashBalance > 0
+      ? [{ name: '现金', weight: cashWeight, fill: '#64748b' }]
+      : []),
+  ];
 
   const warnings = enriched.flatMap((e) => {
     const w: string[] = [];
@@ -179,9 +193,30 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard title="总投入" value={`¥${formatMoney(totalInvest)}`} />
+      <div className="card flex flex-wrap items-end gap-3">
+        <div className="min-w-[200px] flex-1">
+          <label className="label">可用余额（元）</label>
+          <input
+            className="input"
+            type="number"
+            min={0}
+            step={0.01}
+            value={cashBalance || ''}
+            placeholder="0"
+            onChange={(e) => setCashBalance(parseFloat(e.target.value) || 0)}
+          />
+        </div>
+        <p className="pb-2 text-xs text-muted">
+          仓位占比 = 个股市值 ÷（持仓市值 + 余额）
+          <Link to="/guide" className="ml-1 text-blue-600">使用说明</Link>
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <StatCard title="总投入" value={`¥${formatMoney(totalInvest)}`} sub="含买入手续费" />
         <StatCard title="当前市值" value={`¥${formatMoney(totalValue)}`} />
+        <StatCard title="可用余额" value={`¥${formatMoney(cashBalance)}`} sub={cashWeight > 0 ? formatPct(cashWeight) : undefined} />
+        <StatCard title="总资产" value={`¥${formatMoney(totalAssets)}`} sub="市值 + 余额" />
         <StatCard
           title="总盈亏"
           value={`¥${formatMoney(totalPnl)}`}
@@ -192,7 +227,13 @@ export default function HomePage() {
       </div>
 
       {positions.length === 0 ? (
-        <div className="card text-center text-muted py-12">暂无持仓，点击「添加持仓」开始</div>
+        <div className="card space-y-2 text-center text-muted py-12">
+          <p>暂无持仓，点击「添加持仓」开始</p>
+          <p className="text-sm">
+            别忘了填写上方「可用余额」，仓位占比才准确。
+            <Link to="/guide" className="ml-1 text-blue-600">查看使用说明</Link>
+          </p>
+        </div>
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">

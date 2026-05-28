@@ -9,6 +9,7 @@ import CalculatorPage from './pages/CalculatorPage';
 import PositionPage from './pages/PositionPage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
+import GuidePage from './pages/GuidePage';
 
 function Layout() {
   const { data, update } = useAppData();
@@ -35,6 +36,7 @@ function Layout() {
   const nav = [
     { to: '/', label: '持仓' },
     { to: '/calculator', label: '计算器' },
+    { to: '/guide', label: '说明' },
     { to: '/logs', label: '日志', badge: pendingReady },
     { to: '/settings', label: '设置' },
   ];
@@ -106,6 +108,7 @@ export default function App() {
         <Route path="calculator" element={<CalculatorPage />} />
         <Route path="position/:id" element={<PositionPage />} />
         <Route path="logs" element={<LogsPage />} />
+        <Route path="guide" element={<GuidePage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

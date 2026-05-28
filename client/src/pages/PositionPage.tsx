@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { getEffectivePrice, useStockQuotes } from '../hooks/useStockQuotes';
@@ -15,29 +15,37 @@ const CHECKLIST = [
 
 export default function PositionPage() {
   const { id } = useParams();
-  const { data, positions, updatePortfolio } = usePortfolio();
+  const { data, positions, cashBalance, updatePortfolio } = usePortfolio();
   const position = positions.find((p) => p.id === id);
   const { quotes } = useStockQuotes(position ? [position.code] : [], data.settings.refreshIntervalSec);
 
   const [scenarioPct, setScenarioPct] = useState(0);
   const [checked, setChecked] = useState<boolean[]>(CHECKLIST.map(() => false));
-  const [totalAssets, setTotalAssets] = useState(100000);
+
+  const stockMarketValue = useMemo(() => {
+    return positions.reduce((sum, p) => {
+      const px = getEffectivePrice(p.code, quotes, p.manualPrice).price;
+      return sum + px * p.shares;
+    }, 0);
+  }, [positions, quotes]);
+
+  const totalAssets = stockMarketValue + cashBalance;
+  const [totalAssetsInput, setTotalAssetsInput] = useState(totalAssets);
+
+  useEffect(() => {
+    setTotalAssetsInput(totalAssets);
+  }, [totalAssets]);
 
   const enriched = useMemo(() => {
     if (!position) return null;
     const { price, isClosed } = getEffectivePrice(position.code, quotes, position.manualPrice);
-    const allValues = positions.map((p) => {
-      const px = getEffectivePrice(p.code, quotes, p.manualPrice).price;
-      return px * p.shares;
-    });
-    const totalValue = allValues.reduce((a, b) => a + b, 0);
     const metrics = positionMetrics(
       position.costPrice,
       price,
       position.shares,
       position.board,
       data.settings,
-      totalValue,
+      totalAssets,
     );
     const changePct = position.costPrice > 0 ? ((price - position.costPrice) / position.costPrice) * 100 : 0;
     const buyAmount = position.costPrice * position.shares;
@@ -51,10 +59,10 @@ export default function PositionPage() {
       scenarioPrice,
       position.board,
       data.settings,
-      totalAssets,
+      totalAssetsInput,
     );
     return { price, isClosed, metrics, changePct, buyF, sellF, scenario, scenarioPrice };
-  }, [position, quotes, data, scenarioPct, totalAssets, positions]);
+  }, [position, quotes, data, scenarioPct, totalAssetsInput, totalAssets]);
 
   if (!position || !enriched) {
     return (
@@ -98,7 +106,7 @@ export default function PositionPage() {
         <Item label="现价" value={`¥${formatMoney(enriched.price)}`} sub={enriched.isClosed ? '已收盘' : '实时'} />
         <Item label="涨跌幅" value={formatPct(enriched.changePct)} className={pnlColor(enriched.changePct)} />
         <Item label="持仓市值" value={`¥${formatMoney(enriched.metrics.marketValue)}`} />
-        <Item label="占总仓位" value={formatPct(enriched.metrics.weight)} />
+        <Item label="占总资产" value={formatPct(enriched.metrics.weight)} sub="含可用余额" />
         <Item label="盈亏" value={`¥${formatMoney(enriched.metrics.pnl)} (${formatPct(enriched.metrics.pnlPct)})`} className={pnlColor(enriched.metrics.pnl)} />
         <Item label="买入手续费(估)" value={`¥${formatMoney(enriched.buyF.total)}`} muted />
         <Item label="预计卖出手续费" value={`¥${formatMoney(enriched.sellF.total)}`} muted />
@@ -135,8 +143,13 @@ export default function PositionPage() {
           <Item label="回本需涨" value={formatPct(enriched.scenario.breakEvenGainPct)} />
         </div>
         <div>
-          <label className="label">总资金（用于影响比例）</label>
-          <input className="input max-w-xs" type="number" value={totalAssets} onChange={(e) => setTotalAssets(Number(e.target.value))} />
+          <label className="label">总资金（市值 {formatMoney(stockMarketValue)} + 余额 {formatMoney(cashBalance)}）</label>
+          <input
+            className="input max-w-xs"
+            type="number"
+            value={totalAssetsInput}
+            onChange={(e) => setTotalAssetsInput(Number(e.target.value))}
+          />
         </div>
       </div>
 

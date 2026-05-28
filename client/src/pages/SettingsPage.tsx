@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../hooks/useAppContext';
 import { usePortfolio } from '../hooks/usePortfolio';
 import { createDefaultPortfolio } from '../types';
+import { FEE_EXPLAIN, feeSummaryLines } from '../utils/feeNotes';
 
 export default function SettingsPage() {
   const { exportJson, importJson, clearAll } = useAppContext();
@@ -47,7 +49,10 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">设置</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">设置</h1>
+        <Link to="/guide" className="text-sm text-blue-600">使用说明</Link>
+      </div>
 
       <div className="card space-y-4">
         <h2 className="font-semibold">多组合管理</h2>
@@ -60,7 +65,9 @@ export default function SettingsPage() {
                 value={p.name}
                 onChange={(e) => renamePortfolio(p.id, e.target.value)}
               />
-              <span className="text-xs text-muted">{p.positions.length} 持仓 · {p.logs.length} 日志</span>
+              <span className="text-xs text-muted">
+                {p.positions.length} 持仓 · {p.logs.length} 日志 · 余额 ¥{(p.cashBalance ?? 0).toLocaleString()}
+              </span>
               {p.id === activePortfolioId && (
                 <span className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-950 dark:text-blue-300">当前</span>
               )}
@@ -148,11 +155,36 @@ export default function SettingsPage() {
               }))
             }
           />
-          启用最低佣金 5 元
+          启用最低佣金 5 元（默认开启）
         </label>
         <div>
           <label className="label">印花税（卖出，国家强制）</label>
           <input className="input max-w-md bg-surface-2" disabled value={`${(s.stampTaxRate * 100).toFixed(2)}%`} />
+        </div>
+
+        <div className="rounded-lg bg-surface-2 p-3 text-sm">
+          <p className="mb-2 font-medium">费率说明（沪深差异）</p>
+          <ul className="space-y-1.5 text-muted">
+            {feeSummaryLines(s.minCommission).map((line) => (
+              <li key={line}>· {line}</li>
+            ))}
+          </ul>
+          <div className="mt-3 grid gap-2 border-t border-border pt-3 md:grid-cols-2">
+            <div>
+              <p className="font-medium text-text">沪市（主板/科创板）买入</p>
+              <p className="text-xs">{FEE_EXPLAIN.buyTotal.sh}</p>
+              <p className="mt-1 font-medium text-text">沪市卖出</p>
+              <p className="text-xs">{FEE_EXPLAIN.sellTotal.sh}</p>
+            </div>
+            <div>
+              <p className="font-medium text-text">深市（主板/创业板）买入</p>
+              <p className="text-xs">{FEE_EXPLAIN.buyTotal.sz}</p>
+              <p className="mt-1 font-medium text-text">深市卖出</p>
+              <p className="text-xs">{FEE_EXPLAIN.sellTotal.sz}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs">{FEE_EXPLAIN.stampTax}</p>
+          <p className="text-xs">{FEE_EXPLAIN.transfer}</p>
         </div>
         <div>
           <label className="label">行情刷新间隔（秒）</label>

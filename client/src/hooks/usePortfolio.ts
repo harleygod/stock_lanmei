@@ -22,10 +22,14 @@ export function usePortfolio() {
     portfolio,
     positions: portfolio.positions,
     logs: portfolio.logs,
+    cashBalance: portfolio.cashBalance ?? 0,
     portfolios: data.portfolios,
     activePortfolioId: data.activePortfolioId,
     pendingOps: data.pendingOps,
     updatePortfolio,
     switchPortfolio,
+    setCashBalance: (amount: number) => {
+      updatePortfolio((p) => ({ ...p, cashBalance: Math.max(0, amount) }));
+    },
   };
 }

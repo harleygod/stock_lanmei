@@ -54,6 +54,8 @@ export interface Portfolio {
   name: string;
   positions: Position[];
   logs: TradeLog[];
+  /** 账户可用现金余额（元），参与仓位占比与总资产计算 */
+  cashBalance: number;
   createdAt: string;
 }
 
@@ -107,7 +109,7 @@ export interface PositionImportPayload {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   commissionRate: 0.0001154,
-  minCommission: false,
+  minCommission: true,
   stampTaxRate: 0.001,
   theme: 'light',
   refreshIntervalSec: 15,
@@ -122,6 +124,7 @@ export function createDefaultPortfolio(name = '默认组合'): Portfolio {
     name,
     positions: [],
     logs: [],
+    cashBalance: 0,
     createdAt: now,
   };
 }
