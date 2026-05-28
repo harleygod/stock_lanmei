@@ -147,6 +147,26 @@ export function targetSellPrice(
   return Math.ceil(high * 100) / 100;
 }
 
+/** 反推卖出价：使到手净额 = targetNet */
+function findPriceForTargetNet(
+  shares: number,
+  board: Board,
+  settings: FeeSettings,
+  targetNet: number,
+  searchLow: number,
+  searchHigh: number,
+): number {
+  let low = searchLow;
+  let high = searchHigh;
+  for (let i = 0; i < 80; i++) {
+    const mid = (low + high) / 2;
+    const net = netSellProceeds(mid, shares, board, settings).net;
+    if (net < targetNet) low = mid;
+    else high = mid;
+  }
+  return Math.round(high * 100) / 100;
+}
+
 /** 止损价：最大可承受亏损 */
 export function stopLossPrice(
   buyPrice: number,
@@ -156,16 +176,95 @@ export function stopLossPrice(
   maxLoss: number,
 ): number {
   const buy = totalBuyCost(buyPrice, shares, board, settings);
+  if (maxLoss <= 0) return buyPrice;
   const targetNet = buy.totalCost - maxLoss;
-  let low = buyPrice * 0.01;
-  let high = buyPrice;
-  for (let i = 0; i < 80; i++) {
-    const mid = (low + high) / 2;
-    const net = netSellProceeds(mid, shares, board, settings).net;
-    if (net > targetNet) low = mid;
-    else high = mid;
+  const netAtBuy = netSellProceeds(buyPrice, shares, board, settings).net;
+
+  if (targetNet > netAtBuy) {
+    return findPriceForTargetNet(shares, board, settings, targetNet, buyPrice, buyPrice * 2);
   }
-  return Math.floor(high * 100) / 100;
+  return findPriceForTargetNet(shares, board, settings, targetNet, 0.01, buyPrice);
+}
+
+/** 止损 + 现价 + 减仓情景分析 */
+export function stopLossAnalysis(
+  buyPrice: number,
+  shares: number,
+  board: Board,
+  settings: FeeSettings,
+  maxLoss: number,
+  currentPrice?: number,
+  totalAssets?: number,
+  partialSellShares?: number,
+) {
+  const buy = totalBuyCost(buyPrice, shares, board, settings);
+  const stopPrice = stopLossPrice(buyPrice, shares, board, settings, maxLoss);
+  const sellAtStop = netSellProceeds(stopPrice, shares, board, settings);
+  const lossAtStop = buy.totalCost - sellAtStop.net;
+  const lossPctAtStop = buy.totalCost > 0 ? (lossAtStop / buy.totalCost) * 100 : 0;
+
+  let warning: string | undefined;
+  const netAtBuy = netSellProceeds(buyPrice, shares, board, settings).net;
+  if (maxLoss < buy.totalCost - netAtBuy) {
+    warning =
+      '提示：你设定的最大亏损小于「按成本价卖出」的亏损，止损线会在成本价上方，请调大最大亏损或检查参数。';
+  }
+
+  const result: {
+    stopPrice: number;
+    lossAtStop: number;
+    lossPctAtStop: number;
+    warning?: string;
+    current?: {
+      loss: number;
+      lossPct: number;
+      sellNet: number;
+      triggered: boolean;
+      impactPct: number;
+      priceVsStop: string;
+    };
+    partial?: {
+      shares: number;
+      loss: number;
+      sellNet: number;
+      remainingShares: number;
+      remainingCost: number;
+    };
+  } = { stopPrice, lossAtStop, lossPctAtStop, warning };
+
+  if (currentPrice != null && currentPrice > 0) {
+    const sellNow = netSellProceeds(currentPrice, shares, board, settings);
+    const lossNow = buy.totalCost - sellNow.net;
+    const triggered = currentPrice <= stopPrice;
+    const impactPct = totalAssets && totalAssets > 0 ? (lossNow / totalAssets) * 100 : 0;
+    let priceVsStop = '现价高于止损线，尚未触发';
+    if (Math.abs(currentPrice - stopPrice) < 0.02) priceVsStop = '现价接近止损线';
+    else if (triggered) priceVsStop = '现价已低于止损线，按纪律应考虑卖出';
+
+    result.current = {
+      loss: lossNow,
+      lossPct: buy.totalCost > 0 ? (lossNow / buy.totalCost) * 100 : 0,
+      sellNet: sellNow.net,
+      triggered,
+      impactPct,
+      priceVsStop,
+    };
+  }
+
+  if (partialSellShares != null && partialSellShares > 0 && partialSellShares < shares) {
+    const px = currentPrice && currentPrice > 0 ? currentPrice : buyPrice;
+    const sellPart = netSellProceeds(px, partialSellShares, board, settings);
+    const costPart = (buy.totalCost / shares) * partialSellShares;
+    result.partial = {
+      shares: partialSellShares,
+      loss: costPart - sellPart.net,
+      sellNet: sellPart.net,
+      remainingShares: shares - partialSellShares,
+      remainingCost: buy.totalCost - costPart,
+    };
+  }
+
+  return result;
 }
 
 /** 加权平均成本（多笔买入） */

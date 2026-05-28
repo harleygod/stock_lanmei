@@ -11,14 +11,13 @@ import {
   netSellProceeds,
   recoveryAfterLossPct,
   scenarioMatrix,
-  stopLossPrice,
+  stopLossAnalysis,
   targetSellPrice,
   totalBuyCost,
   weightedAverageCost,
 } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor } from '../utils/format';
 import { boardLabel, isShanghai } from '../utils/stockCode';
-import type { Board } from '../types';
 
 import OpportunityCostTab from '../components/calc/OpportunityCostTab';
 import MarginOfSafetyTab from '../components/calc/MarginOfSafetyTab';
@@ -197,46 +196,104 @@ function StopCalculator({
   importPayload: PositionImportPayload | null;
   importTick: number;
 }) {
+  const { cashBalance } = usePortfolio();
   const [price, setPrice] = useState(10);
   const [shares, setShares] = useState(1000);
   const [board, setBoard] = useState<Board>('sz_main');
+  const [currentPrice, setCurrentPrice] = useState(0);
   const [totalAssets, setTotalAssets] = useState(100000);
   const [maxLoss, setMaxLoss] = useState(2000);
+  const [partialShares, setPartialShares] = useState(100);
 
   useEffect(() => {
     if (importPayload && importTick > 0) {
       setPrice(importPayload.price);
       setShares(importPayload.shares);
       setBoard(importPayload.board);
+      const posValue = importPayload.price * importPayload.shares;
+      setTotalAssets(Math.round(posValue + cashBalance));
     }
-  }, [importTick, importPayload]);
+  }, [importTick, importPayload, cashBalance]);
 
-  const stopP = stopLossPrice(price, shares, board, settings, maxLoss);
-  const buy = totalBuyCost(price, shares, board, settings);
-  const sell = netSellProceeds(stopP, shares, board, settings);
-  const loss = buy.totalCost - sell.net;
-  const lossPct = buy.totalCost > 0 ? (loss / buy.totalCost) * 100 : 0;
-  const recovery = recoveryAfterLossPct(-lossPct);
-  const impact = totalAssets > 0 ? (loss / totalAssets) * 100 : 0;
+  const partial = partialShares > 0 && partialShares < shares ? partialShares : 0;
+  const analysis = stopLossAnalysis(
+    price,
+    shares,
+    board,
+    settings,
+    maxLoss,
+    currentPrice > 0 ? currentPrice : undefined,
+    totalAssets,
+    partial > 0 ? partial : undefined,
+  );
+
+  const recovery = recoveryAfterLossPct(-analysis.lossPctAtStop);
+  const impactAtStop = totalAssets > 0 ? (analysis.lossAtStop / totalAssets) * 100 : 0;
 
   return (
     <div className="card space-y-4">
-      <div className="grid gap-3 md:grid-cols-2">
-        <Field label="买入价格" value={price} onChange={setPrice} step={0.01} />
-        <Field label="股数" value={shares} onChange={setShares} />
-        <BoardSelect board={board} onChange={setBoard} />
-        <Field label="总资金" value={totalAssets} onChange={setTotalAssets} />
-        <Field label="最大可承受亏损 (元)" value={maxLoss} onChange={setMaxLoss} />
-      </div>
-      <div className="grid gap-3 md:grid-cols-3">
-        <ResultBox title="止损价格" value={`¥${formatMoney(stopP)}`} />
-        <ResultBox title="触发时亏损" value={`¥${formatMoney(loss)}`} highlight="loss" />
-        <ResultBox title="对总资金影响" value={formatPct(impact)} />
-      </div>
-      <p className="text-sm text-warn">
-        亏损 {formatPct(-lossPct)} 后，需上涨 {formatPct(recovery)} 才能回本（含手续费不对称效应）
+      <p className="text-sm text-muted">
+        设定「最多亏多少」反推止损价；填入<strong>现价</strong>看是否该卖，填<strong>减仓股数</strong>看部分卖出效果。
+        想分批卖完整方案 → 切到「分批卖出」Tab。
       </p>
-      <p className="text-xs text-muted italic">止损线设好后，触发时不要犹豫。等待的代价是指数级的。</p>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="买入成本价" value={price} onChange={setPrice} step={0.01} />
+        <Field label="持仓股数" value={shares} onChange={setShares} />
+        <Field label="当前现价" value={currentPrice} onChange={setCurrentPrice} step={0.01} />
+        <BoardSelect board={board} onChange={setBoard} />
+        <Field label="总资金（市值+现金，算影响比例）" value={totalAssets} onChange={setTotalAssets} />
+        <Field label="最大可承受亏损 (元)" value={maxLoss} onChange={setMaxLoss} />
+        <Field label="拟减仓股数（可选）" value={partialShares} onChange={setPartialShares} />
+      </div>
+
+      {analysis.warning && (
+        <p className="rounded-lg bg-orange-50 px-3 py-2 text-sm text-warn dark:bg-orange-950/30">{analysis.warning}</p>
+      )}
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <ResultBox title="止损价格" value={`¥${formatMoney(analysis.stopPrice)}`} sub="跌到此价卖出，亏损≈上限" />
+        <ResultBox title="触发时亏损" value={`¥${formatMoney(analysis.lossAtStop)}`} highlight="loss" />
+        <ResultBox title="对总资金影响" value={formatPct(-impactAtStop)} highlight="loss" />
+      </div>
+
+      {analysis.current && (
+        <div className="rounded-lg border border-border bg-surface-2 p-3 space-y-2 text-sm">
+          <div className="font-medium">按现价 ¥{formatMoney(currentPrice)} 全部卖出</div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <div>
+              <span className="text-muted">实亏 </span>
+              <span className={pnlColor(-analysis.current.loss)}>¥{formatMoney(analysis.current.loss)}</span>
+              <span className="text-muted"> ({formatPct(-analysis.current.lossPct)})</span>
+            </div>
+            <div>
+              <span className="text-muted">到手 </span>
+              <span>¥{formatMoney(analysis.current.sellNet)}</span>
+            </div>
+            <div>
+              <span className="text-muted">占资金 </span>
+              <span className="text-loss">{formatPct(-analysis.current.impactPct)}</span>
+            </div>
+          </div>
+          <p className={analysis.current.triggered ? 'text-loss font-medium' : 'text-muted'}>
+            {analysis.current.priceVsStop}
+          </p>
+        </div>
+      )}
+
+      {analysis.partial && currentPrice > 0 && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-1 text-sm dark:border-blue-900 dark:bg-blue-950/20">
+          <div className="font-medium">减仓 {analysis.partial.shares} 股 @ ¥{formatMoney(currentPrice)}</div>
+          <div>到手 ¥{formatMoney(analysis.partial.sellNet)} · 该部分亏损 ¥{formatMoney(analysis.partial.loss)}</div>
+          <div className="text-muted">
+            剩余 {analysis.partial.remainingShares} 股 · 剩余成本约 ¥{formatMoney(analysis.partial.remainingCost)}
+          </div>
+        </div>
+      )}
+
+      <p className="text-sm text-muted">
+        若触发止损后仍持有，需涨 {formatPct(recovery)} 才能回本（手续费不对称）。
+      </p>
     </div>
   );
 }
