@@ -21,7 +21,7 @@ export default function GuidePage() {
       <Section title="快速开始">
         <ol className="list-decimal space-y-2 pl-5">
           <li>
-            在 <Link to="/" className="text-blue-600">持仓</Link> 页点击「添加持仓」，填写股票代码、成本价、股数。
+            在 <Link to="/home" className="text-blue-600">持仓</Link> 页点击「添加持仓」，填写股票代码、成本价、股数。
           </li>
           <li>
             在持仓页上方设置 <strong className="text-text">可用余额</strong>（账户里还没买股票的现金），仓位占比会按「市值 + 余额」计算。
@@ -144,7 +144,7 @@ export default function GuidePage() {
       </Section>
 
       <div className="text-center">
-        <Link to="/" className="btn-primary inline-block text-sm">返回持仓</Link>
+        <Link to="/home" className="btn-primary inline-block text-sm">返回持仓</Link>
       </div>
     </div>
   );

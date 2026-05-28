@@ -1,5 +1,5 @@
-import { Outlet, Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { useEffect, useMemo, useCallback } from 'react';
+import { Outlet, Route, Routes, NavLink, Navigate } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
 import { useAppData } from './hooks/useAppData';
 import DisclaimerFooter from './components/DisclaimerFooter';
 import { isPendingReady } from './utils/migrate';
@@ -11,26 +11,27 @@ import SettingsPage from './pages/SettingsPage';
 import GuidePage from './pages/GuidePage';
 import WatchPoolPage from './pages/WatchPoolPage';
 
-function NavLink({ to, isActive, label, badge, navigate }: { to: string; isActive: boolean; label: string; badge?: number; navigate: (to: string) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => { if (!isActive) navigate(to); }}
-      className={isActive ? 'text-blue-600 font-medium' : 'text-muted hover:text-text'}
-      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
-    >
-      {label}
-      {badge ? (
-        <span className="ml-1 rounded-full bg-warn px-1.5 text-xs text-white">{badge}</span>
-      ) : null}
-    </button>
-  );
+type NavItem = { to: string; label: string; end?: boolean; showBadge?: boolean };
+
+const NAV_ITEMS: NavItem[] = [
+  { to: '/home', label: '持仓', end: true },
+  { to: '/watch', label: '观察池' },
+  { to: '/calculator', label: '计算器' },
+  { to: '/guide', label: '说明' },
+  { to: '/logs', label: '日志', showBadge: true },
+  { to: '/settings', label: '设置' },
+];
+
+function navClassName({ isActive }: { isActive: boolean }) {
+  return isActive ? 'text-blue-600 font-medium' : 'text-muted hover:text-text';
+}
+
+function mobileNavClassName({ isActive }: { isActive: boolean }) {
+  return `flex-1 py-3 text-center text-xs ${isActive ? 'text-blue-600 font-medium' : 'text-muted'}`;
 }
 
 function Layout() {
   const { data, update } = useAppData();
-  const location = useLocation();
-  const navigate = useNavigate();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', data.settings.theme === 'dark');
@@ -51,37 +52,32 @@ function Layout() {
     [data.pendingOps, data.activePortfolioId],
   );
 
-  const goHome = useCallback(() => { navigate('/home'); }, [navigate]);
-
-  const isActive = useCallback(
-    (to: string) => to === '/home' ? location.pathname === '/home' || location.pathname === '/' : location.pathname.startsWith(to),
-    [location.pathname],
-  );
-
-  const nav = [
-    { to: '/home', label: '持仓' },
-    { to: '/watch', label: '观察池' },
-    { to: '/calculator', label: '计算器' },
-    { to: '/guide', label: '说明' },
-    { to: '/logs', label: '日志', badge: pendingReady },
-    { to: '/settings', label: '设置' },
-  ];
-
   return (
     <div className="min-h-screen pb-20 md:pb-4">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <button
-            type="button"
-            onClick={goHome}
+          <NavLink
+            to="/home"
+            end
             className="text-lg font-bold text-blue-600"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'none' }}
           >
             决策助手
-          </button>
+          </NavLink>
           <nav className="hidden gap-4 md:flex">
-            {nav.map((n) => (
-              <NavLink key={n.to} to={n.to} isActive={isActive(n.to)} label={n.label} badge={n.badge} navigate={navigate} />
+            {NAV_ITEMS.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.end ?? false}
+                className={navClassName}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit', textDecoration: 'none' }}
+              >
+                {n.label}
+                {n.showBadge && pendingReady > 0 ? (
+                  <span className="ml-1 rounded-full bg-warn px-1.5 text-xs text-white">{pendingReady}</span>
+                ) : null}
+              </NavLink>
             ))}
           </nav>
           {data.portfolios.length <= 1 ? (
@@ -114,25 +110,22 @@ function Layout() {
       <DisclaimerFooter />
 
       <nav className="fixed bottom-0 left-0 right-0 flex border-t border-border bg-surface md:hidden z-50" style={{ touchAction: 'manipulation' }}>
-        {nav.map((n) => {
-          const active = isActive(n.to);
-          return (
-            <button
-              key={n.to}
-              type="button"
-              onClick={() => { if (!active) navigate(n.to); }}
-              className={`flex-1 py-3 text-center text-xs ${active ? 'text-blue-600 font-medium' : 'text-muted'}`}
-              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            >
-              <span className="relative inline-block">
-                {n.label}
-                {n.badge ? (
-                  <span className="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-warn" />
-                ) : null}
-              </span>
-            </button>
-          );
-        })}
+        {NAV_ITEMS.map((n) => (
+          <NavLink
+            key={n.to}
+            to={n.to}
+            end={n.end ?? false}
+            className={mobileNavClassName}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'none' }}
+          >
+            <span className="relative inline-block">
+              {n.label}
+              {n.showBadge && pendingReady > 0 ? (
+                <span className="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-warn" />
+              ) : null}
+            </span>
+          </NavLink>
+        ))}
       </nav>
     </div>
   );
