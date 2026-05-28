@@ -63,7 +63,7 @@ export default function PositionPage() {
   if (!position || !enriched) {
     return (
       <div className="card">
-        未找到持仓 <Link to="/" className="text-blue-600">返回</Link>
+        未找到持仓 <Link to="/home" className="text-blue-600">返回</Link>
       </div>
     );
   }
@@ -102,7 +102,7 @@ export default function PositionPage() {
 
   return (
     <div className="space-y-4">
-      <Link to="/" className="text-sm text-blue-600">← 返回持仓</Link>
+      <Link to="/home" className="text-sm text-blue-600">← 返回持仓</Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">{position.name} ({position.code})</h1>
         <div className="flex gap-2 text-sm">
