@@ -1,5 +1,5 @@
-import type { Board, AppSettings } from '../types';
-import { boardLabel } from '../utils/stockCode';
+import type { Board, AppSettings } from '../../types';
+import { boardLabel } from '../../utils/stockCode';
 
 export function Field({
   label,

@@ -3,8 +3,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-profit: #16a34a;
-  --color-loss: #dc2626;
+  --color-profit: #dc2626;
+  --color-loss: #16a34a;
   --color-warn: #ea580c;
   --color-muted: #6b7280;
   --color-surface: #ffffff;
@@ -30,16 +30,12 @@ body {
   @apply rounded-xl border border-border bg-surface p-4 shadow-sm;
 }
 
-.btn {
-  @apply rounded-lg px-4 py-2 text-sm font-medium transition-colors;
-}
-
 .btn-primary {
-  @apply btn bg-blue-600 text-white hover:bg-blue-700;
+  @apply rounded-lg px-4 py-2 text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700;
 }
 
 .btn-ghost {
-  @apply btn border border-border bg-surface hover:bg-surface-2;
+  @apply rounded-lg px-4 py-2 text-sm font-medium transition-colors border border-border bg-surface hover:bg-surface-2;
 }
 
 .input {
@@ -58,3 +54,7 @@ body {
 .text-loss { color: var(--color-loss); }
 .text-warn { color: var(--color-warn); }
 .text-muted { color: var(--color-muted); }
+
+/* Prevent Recharts SVG from stealing touch events on mobile */
+.recharts-surface { pointer-events: none !important; }
+.recharts-tooltip-wrapper { pointer-events: auto !important; }

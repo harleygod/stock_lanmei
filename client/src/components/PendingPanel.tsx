@@ -98,6 +98,6 @@ export default function PendingPanel() {
 }
 
 export function usePendingBadgeCount() {
-  const { data, portfolio, pendingOps } = usePortfolio();
+  const { portfolio, pendingOps } = usePortfolio();
   return pendingOps.filter((op) => op.portfolioId === portfolio.id && isPendingReady(op)).length;
 }

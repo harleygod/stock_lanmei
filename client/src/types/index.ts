@@ -119,8 +119,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export function createDefaultPortfolio(name = '默认组合'): Portfolio {
   const now = new Date().toISOString();
+  const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
   return {
-    id: crypto.randomUUID(),
+    id,
     name,
     positions: [],
     logs: [],

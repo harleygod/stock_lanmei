@@ -1,8 +1,7 @@
-import { Link, NavLink, Outlet, Route, Routes } from 'react-router-dom';
-import { useEffect, useMemo } from 'react';
+import { Outlet, Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useAppData } from './hooks/useAppData';
 import DisclaimerFooter from './components/DisclaimerFooter';
-import PortfolioSelector from './components/PortfolioSelector';
 import { isPendingReady } from './utils/migrate';
 import HomePage from './pages/HomePage';
 import CalculatorPage from './pages/CalculatorPage';
@@ -11,8 +10,26 @@ import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
 import GuidePage from './pages/GuidePage';
 
+function NavLink({ to, isActive, label, badge, navigate }: { to: string; isActive: boolean; label: string; badge?: number; navigate: (to: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => { if (!isActive) navigate(to); }}
+      className={isActive ? 'text-blue-600 font-medium' : 'text-muted hover:text-text'}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
+    >
+      {label}
+      {badge ? (
+        <span className="ml-1 rounded-full bg-warn px-1.5 text-xs text-white">{badge}</span>
+      ) : null}
+    </button>
+  );
+}
+
 function Layout() {
   const { data, update } = useAppData();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', data.settings.theme === 'dark');
@@ -33,8 +50,15 @@ function Layout() {
     [data.pendingOps, data.activePortfolioId],
   );
 
+  const goHome = useCallback(() => { navigate('/home'); }, [navigate]);
+
+  const isActive = useCallback(
+    (to: string) => to === '/home' ? location.pathname === '/home' || location.pathname === '/' : location.pathname.startsWith(to),
+    [location.pathname],
+  );
+
   const nav = [
-    { to: '/', label: '持仓' },
+    { to: '/home', label: '持仓' },
     { to: '/calculator', label: '计算器' },
     { to: '/guide', label: '说明' },
     { to: '/logs', label: '日志', badge: pendingReady },
@@ -45,26 +69,36 @@ function Layout() {
     <div className="min-h-screen pb-20 md:pb-4">
       <header className="sticky top-0 z-10 border-b border-border bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/" className="text-lg font-bold text-blue-600">
+          <button
+            type="button"
+            onClick={goHome}
+            className="text-lg font-bold text-blue-600"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
             决策助手
-          </Link>
+          </button>
           <nav className="hidden gap-4 md:flex">
             {nav.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) =>
-                  isActive ? 'text-blue-600 font-medium' : 'text-muted hover:text-text'
-                }
-              >
-                {n.label}
-                {'badge' in n && n.badge ? (
-                  <span className="ml-1 rounded-full bg-warn px-1.5 text-xs text-white">{n.badge}</span>
-                ) : null}
-              </NavLink>
+              <NavLink key={n.to} to={n.to} isActive={isActive(n.to)} label={n.label} badge={n.badge} navigate={navigate} />
             ))}
           </nav>
-          <PortfolioSelector />
+          {data.portfolios.length <= 1 ? (
+            <span className="hidden text-xs text-muted md:inline">
+              {data.portfolios[0]?.name ?? '默认组合'}
+            </span>
+          ) : (
+            <select
+              className="hidden max-w-[120px] rounded border border-border bg-surface px-2 py-1 text-xs md:inline"
+              value={data.activePortfolioId}
+              onChange={(e) => update((d) => ({ ...d, activePortfolioId: e.target.value }))}
+            >
+              {data.portfolios.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button type="button" onClick={toggleTheme} className="btn-ghost text-xs">
             {data.settings.theme === 'dark' ? '浅色' : '深色'}
           </button>
@@ -77,24 +111,26 @@ function Layout() {
 
       <DisclaimerFooter />
 
-      <nav className="fixed bottom-0 left-0 right-0 flex border-t border-border bg-surface md:hidden">
-        {nav.map((n) => (
-          <NavLink
-            key={n.to}
-            to={n.to}
-            end={n.to === '/'}
-            className={({ isActive }) =>
-              `flex-1 py-3 text-center text-xs ${isActive ? 'text-blue-600 font-medium' : 'text-muted'}`
-            }
-          >
-            <span className="relative inline-block">
-              {n.label}
-              {'badge' in n && n.badge ? (
-                <span className="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-warn" />
-              ) : null}
-            </span>
-          </NavLink>
-        ))}
+      <nav className="fixed bottom-0 left-0 right-0 flex border-t border-border bg-surface md:hidden z-50" style={{ touchAction: 'manipulation' }}>
+        {nav.map((n) => {
+          const active = isActive(n.to);
+          return (
+            <button
+              key={n.to}
+              type="button"
+              onClick={() => { if (!active) navigate(n.to); }}
+              className={`flex-1 py-3 text-center text-xs ${active ? 'text-blue-600 font-medium' : 'text-muted'}`}
+              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              <span className="relative inline-block">
+                {n.label}
+                {n.badge ? (
+                  <span className="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-warn" />
+                ) : null}
+              </span>
+            </button>
+          );
+        })}
       </nav>
     </div>
   );
@@ -104,7 +140,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<HomePage />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
+        <Route path="home" element={<HomePage />} />
         <Route path="calculator" element={<CalculatorPage />} />
         <Route path="position/:id" element={<PositionPage />} />
         <Route path="logs" element={<LogsPage />} />
