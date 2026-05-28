@@ -15,7 +15,7 @@ import { usePortfolio } from '../hooks/usePortfolio';
 import { getEffectivePrice, useStockQuotes } from '../hooks/useStockQuotes';
 import { herfindahlIndex, positionMetrics } from '../utils/calculations';
 import { formatMoney, formatPct, pnlColor, uid } from '../utils/format';
-import { boardLabel, inferBoard } from '../utils/stockCode';
+import { boardLabel, inferBoard, isShanghai } from '../utils/stockCode';
 import type { Board, Position } from '../types';
 
 const COLORS = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#dc2626', '#64748b'];
@@ -164,12 +164,21 @@ export default function HomePage() {
                 const code = e.target.value;
                 setForm({ ...form, code, board: inferBoard(code) });
               }}
-              placeholder="如 002475"
+              placeholder="如 002475 / 600519"
             />
+            {form.code.replace(/\D/g, '').length >= 3 && (
+              <div className="mt-1 flex items-center gap-2 text-xs">
+                <span className={`rounded-full px-2 py-0.5 font-medium ${isShanghai(form.board) ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+                  {isShanghai(form.board) ? '上海' : '深圳'}
+                </span>
+                <span className="text-muted">{boardLabel(form.board)}</span>
+                <span className="text-muted">· 自动识别</span>
+              </div>
+            )}
           </div>
           <div>
-            <label className="label">名称</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <label className="label">名称（选填）</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={form.code.replace(/\D/g, '') || ''} />
           </div>
           <div>
             <label className="label">成本价（元）</label>
@@ -180,7 +189,7 @@ export default function HomePage() {
             <input className="input" type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: e.target.value })} />
           </div>
           <div>
-            <label className="label">板块</label>
+            <label className="label">板块（可手动覆盖）</label>
             <select className="input" value={form.board} onChange={(e) => setForm({ ...form, board: e.target.value as Board })}>
               {(['sh_main', 'sz_main', 'gem', 'star', 'bse'] as Board[]).map((b) => (
                 <option key={b} value={b}>{boardLabel(b)}</option>
