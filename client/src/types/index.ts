@@ -92,7 +92,7 @@ export interface StockQuote {
   low: number;
   volume: number;
   isClosed: boolean;
-  source: 'sina' | 'tencent' | 'manual';
+  source: 'sina' | 'tencent' | 'eastmoney' | 'manual';
   updatedAt: string;
 }
 

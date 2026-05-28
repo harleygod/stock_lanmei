@@ -41,6 +41,17 @@ docker compose up -d --build
 
 访问 `http://你的VPS:3001`
 
+**重要：** 行情走 `/api/quote`，必须由 Node 服务转发。不要只用 nginx 托管静态 `dist`，否则 `/api` 会 404。
+
+若前面有 nginx，参考 `deploy/nginx.example.conf` 把 `/` 反代到 `3001`。
+
+### 行情获取失败排查
+
+1. 浏览器访问 `http://VPS:3001/api/health` 应返回 `{"ok":true,...}`
+2. 访问 `http://VPS:3001/api/quote/sz002475` 应返回 JSON 含 `price`
+3. 若 health 正常但 quote 502：云服务器 IP 可能被新浪/腾讯限流 — 本项目已加 **东方财富** 作为首选数据源
+4. 更新部署：`docker compose pull && docker compose up -d --build`
+
 建议前面加 Nginx/Caddy 反向代理 + HTTPS + Basic Auth。
 
 ## 费率默认值
