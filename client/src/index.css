@@ -1,0 +1,60 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-profit: #16a34a;
+  --color-loss: #dc2626;
+  --color-warn: #ea580c;
+  --color-muted: #6b7280;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f4f6;
+  --color-border: #e5e7eb;
+  --color-text: #111827;
+}
+
+.dark {
+  --color-surface: #111827;
+  --color-surface-2: #1f2937;
+  --color-border: #374151;
+  --color-text: #f9fafb;
+  --color-muted: #9ca3af;
+}
+
+body {
+  @apply bg-surface-2 text-text antialiased;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.card {
+  @apply rounded-xl border border-border bg-surface p-4 shadow-sm;
+}
+
+.btn {
+  @apply rounded-lg px-4 py-2 text-sm font-medium transition-colors;
+}
+
+.btn-primary {
+  @apply btn bg-blue-600 text-white hover:bg-blue-700;
+}
+
+.btn-ghost {
+  @apply btn border border-border bg-surface hover:bg-surface-2;
+}
+
+.input {
+  @apply w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500;
+}
+
+.label {
+  @apply mb-1 block text-xs text-muted;
+}
+
+.tab-active {
+  @apply border-b-2 border-blue-600 text-blue-600 font-medium;
+}
+
+.text-profit { color: var(--color-profit); }
+.text-loss { color: var(--color-loss); }
+.text-warn { color: var(--color-warn); }
+.text-muted { color: var(--color-muted); }
